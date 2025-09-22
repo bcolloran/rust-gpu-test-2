@@ -1,5 +1,5 @@
 [workspace]
-members = ["kernel", "shared", "sparkler", "sparkler_test"]
+members = ["kernel", "shared", "sparkler", "sparkler_macros", "sparkler_test"]
 
 [package]
 name = "rust-gpu-chimera-demo"
