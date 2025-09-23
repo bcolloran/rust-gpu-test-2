@@ -1,6 +1,11 @@
 //! Error types for the library
 
 use thiserror::Error;
+#[cfg(feature = "vulkano")]
+use vulkano::{
+    buffer::AllocateBufferError, command_buffer::CommandBufferExecError, sync::HostAccessError,
+    Validated,
+};
 
 /// Error types for the Rust GPU Chimera demo
 #[derive(Error, Debug)]
@@ -58,14 +63,29 @@ pub enum ChimeraError {
     #[cfg(feature = "vulkano")]
     #[error("vulkano VulkanoValidatedOtherError: {0}")]
     VulkanoValidatedOtherError(vulkano::VulkanError),
-
     #[cfg(feature = "vulkano")]
     #[error("vulkano SpirvBytesNotMultipleOf4: {0}")]
     VulkanoSpirvBytesNotMultipleOf4(#[from] vulkano::shader::spirv::SpirvBytesNotMultipleOf4),
 
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano CommandBufferExecError: {0}")]
+    VulkanoCommandBufferExecError(#[from] CommandBufferExecError),
+
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano HostAccessError: {0}")]
+    VulkanoHostAccessError(#[from] HostAccessError),
+
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano ValidatedAllocateBufferError: {0}")]
+    VulkanoValidatedAllocateBufferError(#[from] Validated<AllocateBufferError>),
+
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano ValidatedAllocateBufferError: {0}")]
+    VulkanoBoxedValidationError(#[from] Box<vulkano::ValidationError>),
+
     // #[cfg(feature = "vulkano")]
-    // #[error("vulkano VulkanError: {0}")]
-    // VulkanoVulkanError(#[from] vulkano::VulkanError),
+    // #[error("vulkano VulkanoValidatedValidationError: {0}")]
+    // VulkanoValidatedValidationError(#[from] Validated<vulkano::ValidationError>),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -95,13 +115,6 @@ impl From<vulkano::Validated<vulkano::VulkanError>> for ChimeraError {
                 ChimeraError::VulkanoValidatedValidationError(*e)
             }
         }
-    }
-}
-
-#[cfg(feature = "vulkano")]
-impl From<Box<vulkano::ValidationError>> for ChimeraError {
-    fn from(err: Box<vulkano::ValidationError>) -> Self {
-        ChimeraError::VulkanoValidationError(*err)
     }
 }
 

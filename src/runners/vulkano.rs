@@ -227,8 +227,7 @@ impl VulkanoRunner {
                 ..Default::default()
             },
             data.iter().copied(),
-        )
-        .map_err(|e| ChimeraError::Vulkano(e.to_string()))?;
+        )?;
 
         // Create descriptor set (binding 0: storage buffer)
         let layout = self
@@ -280,15 +279,12 @@ impl VulkanoRunner {
 
         // Execute + wait
         let future = sync::now(self.device.clone())
-            .then_execute(self.queue.clone(), command_buffer)
-            .map_err(|e| ChimeraError::Vulkano(e.to_string()))?
+            .then_execute(self.queue.clone(), command_buffer)?
             .then_signal_fence_and_flush()?;
         future.wait(None)?;
 
         // Read back results (buffer is host visible)
-        let content = buffer
-            .read()
-            .map_err(|e| ChimeraError::Vulkano(e.to_string()))?;
+        let content = buffer.read()?;
         data.copy_from_slice(&content[..len]);
 
         Ok(())
