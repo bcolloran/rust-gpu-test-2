@@ -160,28 +160,24 @@ pub fn bitonic_kernel(
     );
 }
 
-#[cfg(target_arch = "spirv")]
+// Additional experimental kernel disabled by default to avoid interfering with
+// descriptor set reflection in Vulkano (multiple entry points with differing
+// layouts can trigger stricter validation). Enable with the `add_kernel` feature
+// if/when needed.
+#[cfg(all(target_arch = "spirv", feature = "add_kernel"))]
 fn add_update(a: &mut u32, b: u32) {
     *a += b
 }
 
-/// GPU entry point for Vulkan/SPIR-V
-#[cfg(target_arch = "spirv")]
+/// GPU entry point for Vulkan/SPIR-V (optional)
+#[cfg(all(target_arch = "spirv", feature = "add_kernel"))]
 #[spirv(compute(threads(256)))]
 pub fn add_kernel(
     #[spirv(global_invocation_id)] gid: UVec3,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] a: &mut [u32],
     #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] b: &[u32],
-    #[spirv(push_constant)] params: &BitonicParams,
+    #[spirv(push_constant)] _params: &BitonicParams,
 ) {
     let thread_id = ThreadId::new(gid.x);
-
-    // Convert u32 to SortOrder
-    let sort_order = if params.sort_order == 0 {
-        SortOrder::Ascending
-    } else {
-        SortOrder::Descending
-    };
-
     add_update(&mut a[thread_id.as_usize()], b[thread_id.as_usize()]);
 }

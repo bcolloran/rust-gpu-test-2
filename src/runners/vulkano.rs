@@ -27,7 +27,7 @@ use vulkano::{
         },
         DescriptorSet, WriteDescriptorSet,
     },
-    device::{Device, DeviceCreateInfo, Queue, QueueCreateInfo},
+    device::{Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, Queue, QueueCreateInfo},
     instance::{Instance, InstanceCreateInfo},
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
     pipeline::{
@@ -83,6 +83,28 @@ impl VulkanoRunner {
             .ok_or(ChimeraError::NoComputeQueue)?;
 
         // 5. Create logical device + queue
+        // Enable storage buffer storage class extension (required by generated SPIR-V)
+        // Reference: Vulkano book compute pipeline chapter
+        let required_extensions = DeviceExtensions {
+            khr_storage_buffer_storage_class: true,
+            ..DeviceExtensions::empty()
+        };
+
+        // Enable required device features. Our SPIR-V (from rust-gpu targeting Vulkan 1.2)
+        // uses the VulkanMemoryModel capability, which maps to the `vulkan_memory_model`
+        // device feature. Without enabling this feature, Vulkano validation rejects the
+        // shader module creation (previous runtime error root cause).
+        let mut required_features = DeviceFeatures::empty();
+        required_features.vulkan_memory_model = true;
+
+        // Verify support before requesting so we can provide a clearer error.
+        if !physical.supported_features().contains(&required_features) {
+            return Err(ChimeraError::Other(
+                "Selected physical device does not support required feature: vulkan_memory_model"
+                    .into(),
+            ));
+        }
+
         let (device, mut queues) = Device::new(
             physical,
             DeviceCreateInfo {
@@ -90,6 +112,8 @@ impl VulkanoRunner {
                     queue_family_index,
                     ..Default::default()
                 }],
+                enabled_extensions: required_extensions,
+                enabled_features: required_features,
                 ..Default::default()
             },
         )?;
@@ -114,11 +138,19 @@ impl VulkanoRunner {
         // Convert SPIR-V bytes to words then create shader module
         let words = vulkano::shader::spirv::bytes_to_words(kernel_bytes)?;
         let shader_module = unsafe {
-            ShaderModule::new(
+            match ShaderModule::new(
                 device.clone(),
                 vulkano::shader::ShaderModuleCreateInfo::new(&words),
-            )
-        }?;
+            ) {
+                Ok(m) => m,
+                Err(e) => {
+                    // Provide more detailed diagnostics using Debug formatting
+                    return Err(ChimeraError::Other(format!(
+                        "Failed to create shader module: {e:?}"
+                    )));
+                }
+            }
+        };
 
         // Entry point name (same env var as ash runner)
         let entry_point_name = std::env::var("BITONIC_KERNEL_SPV_ENTRY")
