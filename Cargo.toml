@@ -12,6 +12,7 @@ default = ["vulkan", "ash"]
 vulkan = ["spirv-builder"]
 wgpu = ["dep:wgpu", "pollster", "futures", "spirv-builder"]
 ash = ["vulkan", "dep:ash", "ash-window", "winit", "raw-window-handle"]
+vulkano = ["vulkan", "dep:vulkano"]
 
 [dependencies]
 # Shared dependencies
@@ -40,7 +41,7 @@ winit = { version = "0.29", optional = true }
 raw-window-handle = { version = "0.6", optional = true }
 
 # Vulkan dependencies (vulkano)
-vulkano = "0.35.2"
+vulkano = { version = "0.35.2", optional = true }
 
 # Error handling
 thiserror = "1.0"

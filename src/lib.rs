@@ -11,6 +11,8 @@
 #[cfg(all(feature = "wgpu", feature = "ash"))]
 compile_error!("Cannot enable both 'wgpu' and 'ash' features at the same time");
 
+// Allow vulkano to be combined for comparison; if exclusivity desired add similar compile_error.
+
 #[cfg(all(target_os = "macos"))]
 compile_error!("The 'cuda' feature is not supported on macOS. CUDA requires NVIDIA GPUs and is only available on Linux and Windows");
 
@@ -117,8 +119,11 @@ pub use runners::WgpuRunner;
 #[cfg(feature = "ash")]
 pub use runners::AshRunner;
 
+#[cfg(feature = "vulkano")]
+pub use runners::VulkanoRunner;
+
 /// Compiled SPIR-V bytecode for the bitonic sort kernel
-#[cfg(any(feature = "wgpu", feature = "ash"))]
+#[cfg(any(feature = "wgpu", feature = "ash", feature = "vulkano"))]
 pub const BITONIC_SPIRV: &[u8] = include_bytes!(env!("BITONIC_KERNEL_SPV_PATH"));
 
 /// Verify that a slice is sorted in the specified order

@@ -92,13 +92,13 @@ fn run_test_on_backend<T>(data: &mut [T], test_type: &str, order: SortOrder) -> 
 where
     T: SortableKey + bytemuck::Pod + Send + Sync + std::fmt::Debug + PartialOrd + Clone,
 {
-    #[cfg(not(any(feature = "wgpu", feature = "ash")))]
+    #[cfg(not(any(feature = "wgpu", feature = "ash", feature = "vulkano")))]
     {
         let runner = CpuRunner;
         run_sort_test(&runner, data, test_type, order)?;
     }
 
-    #[cfg(any(feature = "wgpu", feature = "ash"))]
+    #[cfg(any(feature = "wgpu", feature = "ash", feature = "vulkano"))]
     {
         let mut gpu_executed = false;
 
@@ -119,6 +119,16 @@ where
                 gpu_executed = true;
             } else if let Err(e) = AshRunner::new() {
                 eprintln!("  Vulkan initialization failed: {e}");
+            }
+        }
+
+        #[cfg(feature = "vulkano")]
+        if !gpu_executed {
+            if let Ok(runner) = VulkanoRunner::new() {
+                run_sort_test(&runner, data, test_type, order)?;
+                gpu_executed = true;
+            } else if let Err(e) = VulkanoRunner::new() {
+                eprintln!("  Vulkano initialization failed: {e}");
             }
         }
 
