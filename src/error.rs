@@ -51,6 +51,18 @@ pub enum ChimeraError {
     #[error("vulkano ValidationError: {0}")]
     VulkanoValidationError(#[from] vulkano::ValidationError),
 
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano VulkanoValidatedValidationError: {0}")]
+    VulkanoValidatedValidationError(vulkano::ValidationError),
+
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano VulkanoValidatedOtherError: {0}")]
+    VulkanoValidatedOtherError(vulkano::VulkanError),
+
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano SpirvBytesNotMultipleOf4: {0}")]
+    VulkanoSpirvBytesNotMultipleOf4(#[from] vulkano::shader::spirv::SpirvBytesNotMultipleOf4),
+
     // #[cfg(feature = "vulkano")]
     // #[error("vulkano VulkanError: {0}")]
     // VulkanoVulkanError(#[from] vulkano::VulkanError),
@@ -77,22 +89,19 @@ impl From<ash::vk::Result> for ChimeraError {
 #[cfg(feature = "vulkano")]
 impl From<vulkano::Validated<vulkano::VulkanError>> for ChimeraError {
     fn from(err: vulkano::Validated<vulkano::VulkanError>) -> Self {
-        ChimeraError::Vulkano(err.to_string())
-    }
-}
-
-// Additional Vulkano-specific error conversions used by the runner
-#[cfg(feature = "vulkano")]
-impl From<vulkano::shader::spirv::SpirvBytesNotMultipleOf4> for ChimeraError {
-    fn from(err: vulkano::shader::spirv::SpirvBytesNotMultipleOf4) -> Self {
-        ChimeraError::Vulkano(err.to_string())
+        match err {
+            vulkano::Validated::Error(e) => ChimeraError::VulkanoValidatedOtherError(e),
+            vulkano::Validated::ValidationError(e) => {
+                ChimeraError::VulkanoValidatedValidationError(*e)
+            }
+        }
     }
 }
 
 #[cfg(feature = "vulkano")]
 impl From<Box<vulkano::ValidationError>> for ChimeraError {
     fn from(err: Box<vulkano::ValidationError>) -> Self {
-        ChimeraError::Vulkano(err.to_string())
+        ChimeraError::VulkanoValidationError(*err)
     }
 }
 
