@@ -160,8 +160,9 @@ pub fn bitonic_kernel(
     );
 }
 
-fn add_update(mut a: u32, b: u32) {
-    a += b
+#[cfg(target_arch = "spirv")]
+fn add_update(a: &mut u32, b: u32) {
+    *a += b
 }
 
 /// GPU entry point for Vulkan/SPIR-V
@@ -182,5 +183,5 @@ pub fn add_kernel(
         SortOrder::Descending
     };
 
-    add_update(a[thread_id.as_usize()], b[thread_id.as_usize()]);
+    add_update(&mut a[thread_id.as_usize()], b[thread_id.as_usize()]);
 }

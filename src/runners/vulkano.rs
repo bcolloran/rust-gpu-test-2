@@ -60,17 +60,14 @@ impl VulkanoRunner {
     /// Create a new Vulkano runner
     pub fn new() -> Result<Self> {
         // 1. Load the Vulkan library
-        let library = VulkanLibrary::new()
-            .map_err(|e| ChimeraError::Other(format!("Failed to load Vulkan: {e}")))?;
+        let library = VulkanLibrary::new()?;
 
         // 2. Create instance
-        let instance = Instance::new(library, InstanceCreateInfo::default())
-            .map_err(|e| ChimeraError::Other(format!("Failed to create instance: {e}")))?;
+        let instance = Instance::new(library, InstanceCreateInfo::default())?;
 
         // 3. Pick first physical device with a compute queue
         let physical = instance
-            .enumerate_physical_devices()
-            .map_err(|e| ChimeraError::Other(format!("Enumerate physical devices failed: {e}")))?
+            .enumerate_physical_devices()?
             .next()
             .ok_or_else(|| ChimeraError::NoVulkanDevice(0))?;
 
@@ -95,8 +92,7 @@ impl VulkanoRunner {
                 }],
                 ..Default::default()
             },
-        )
-        .map_err(|e| ChimeraError::Other(format!("Failed to create device: {e}")))?;
+        )?;
 
         let queue = queues
             .next()
@@ -116,15 +112,13 @@ impl VulkanoRunner {
         // 7. Create shader module from embedded SPIR-V
         let kernel_bytes = crate::BITONIC_SPIRV;
         // Convert SPIR-V bytes to words then create shader module
-        let words = vulkano::shader::spirv::bytes_to_words(kernel_bytes)
-            .map_err(|e| ChimeraError::Other(format!("Invalid SPIR-V bytes: {e}")))?;
+        let words = vulkano::shader::spirv::bytes_to_words(kernel_bytes)?;
         let shader_module = unsafe {
             ShaderModule::new(
                 device.clone(),
                 vulkano::shader::ShaderModuleCreateInfo::new(&words),
             )
-        }
-        .map_err(|e| ChimeraError::Other(format!("Failed to create shader module: {e}")))?;
+        }?;
 
         // Entry point name (same env var as ash runner)
         let entry_point_name = std::env::var("BITONIC_KERNEL_SPV_ENTRY")
@@ -150,8 +144,7 @@ impl VulkanoRunner {
                 bindings,
                 ..Default::default()
             },
-        )
-        .map_err(|e| ChimeraError::Other(format!("Failed to create descriptor set layout: {e}")))?;
+        )?;
 
         // Pipeline layout + push constants
         let pipeline_layout = PipelineLayout::new(
@@ -165,14 +158,12 @@ impl VulkanoRunner {
                 }],
                 ..Default::default()
             },
-        )
-        .map_err(|e| ChimeraError::Other(format!("Failed to create pipeline layout: {e}")))?;
+        )?;
 
         // Build stage and compute pipeline
         let stage = PipelineShaderStageCreateInfo::new(entry_point.clone());
         let pipeline_info = ComputePipelineCreateInfo::stage_layout(stage, pipeline_layout.clone());
-        let pipeline = ComputePipeline::new(device.clone(), None, pipeline_info)
-            .map_err(|e| ChimeraError::Other(format!("Failed to create compute pipeline: {e}")))?;
+        let pipeline = ComputePipeline::new(device.clone(), None, pipeline_info)?;
 
         Ok(Self {
             device,
@@ -205,7 +196,7 @@ impl VulkanoRunner {
             },
             data.iter().copied(),
         )
-        .map_err(|e| ChimeraError::Other(format!("Failed to create buffer: {e}")))?;
+        .map_err(|e| ChimeraError::Vulkano(e.to_string()))?;
 
         // Create descriptor set (binding 0: storage buffer)
         let layout = self
@@ -223,58 +214,49 @@ impl VulkanoRunner {
             layout,
             [WriteDescriptorSet::buffer(0, buffer.clone())],
             [],
-        )
-        .map_err(|e| ChimeraError::Other(format!("Failed to create descriptor set: {e}")))?;
+        )?;
 
         // Build command buffer
         let mut builder = AutoCommandBufferBuilder::primary(
             self.command_buffer_allocator.clone(),
             self.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
-        )
-        .map_err(|e| ChimeraError::Other(format!("Failed to create command buffer: {e}")))?;
+        )?;
 
-        builder.bind_pipeline_compute(self.pipeline.clone());
+        builder.bind_pipeline_compute(self.pipeline.clone())?;
         builder.bind_descriptor_sets(
             PipelineBindPoint::Compute,
             self.pipeline.layout().clone(),
             0,
             set,
-        );
+        )?;
 
         // Push constants
         builder.push_constants(
             self.pipeline.layout().clone(),
             0,
             BitonicPushConstants(params),
-        );
+        )?;
 
         // Dispatch
         let num_workgroups = params.num_elements.div_ceil(WORKGROUP_SIZE);
         unsafe {
-            builder
-                .dispatch([num_workgroups, 1, 1])
-                .map_err(|e| ChimeraError::Other(format!("Failed to record dispatch: {e}")))?;
+            builder.dispatch([num_workgroups, 1, 1])?;
         }
 
-        let command_buffer = builder
-            .build()
-            .map_err(|e| ChimeraError::Other(format!("Failed to build command buffer: {e}")))?;
+        let command_buffer = builder.build()?;
 
         // Execute + wait
         let future = sync::now(self.device.clone())
             .then_execute(self.queue.clone(), command_buffer)
-            .map_err(|e| ChimeraError::Other(format!("Failed to submit: {e}")))?
-            .then_signal_fence_and_flush()
-            .map_err(|e| ChimeraError::Other(format!("Failed to flush: {e}")))?;
-        future
-            .wait(None)
-            .map_err(|e| ChimeraError::Other(format!("Failed waiting on GPU: {e}")))?;
+            .map_err(|e| ChimeraError::Vulkano(e.to_string()))?
+            .then_signal_fence_and_flush()?;
+        future.wait(None)?;
 
         // Read back results (buffer is host visible)
         let content = buffer
             .read()
-            .map_err(|e| ChimeraError::Other(format!("Failed to map buffer: {e}")))?;
+            .map_err(|e| ChimeraError::Vulkano(e.to_string()))?;
         data.copy_from_slice(&content[..len]);
 
         Ok(())
