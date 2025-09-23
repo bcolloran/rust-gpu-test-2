@@ -8,10 +8,10 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [features]
-default = ["vulkan", "ash"]
+default = ["vulkan", "vulkano"]
 vulkan = ["spirv-builder"]
 wgpu = ["dep:wgpu", "pollster", "futures", "spirv-builder"]
-ash = ["vulkan", "dep:ash", "ash-window", "winit", "raw-window-handle"]
+ash = ["vulkan", "dep:ash", "ash-window", "raw-window-handle"]
 vulkano = ["vulkan", "dep:vulkano"]
 
 [dependencies]
@@ -37,7 +37,6 @@ futures = { version = "0.3", optional = true }
 # Vulkan dependencies (ash)
 ash = { version = "0.38", optional = true }
 ash-window = { version = "0.12", optional = true }
-winit = { version = "0.29", optional = true }
 raw-window-handle = { version = "0.6", optional = true }
 
 # Vulkan dependencies (vulkano)
