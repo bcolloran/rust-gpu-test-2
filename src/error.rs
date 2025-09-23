@@ -57,13 +57,6 @@ pub enum ChimeraError {
     VulkanoValidationError(#[from] vulkano::ValidationError),
 
     #[cfg(feature = "vulkano")]
-    #[error("vulkano VulkanoValidatedValidationError: {0}")]
-    VulkanoValidatedValidationError(vulkano::ValidationError),
-
-    #[cfg(feature = "vulkano")]
-    #[error("vulkano VulkanoValidatedOtherError: {0}")]
-    VulkanoValidatedOtherError(vulkano::VulkanError),
-    #[cfg(feature = "vulkano")]
     #[error("vulkano SpirvBytesNotMultipleOf4: {0}")]
     VulkanoSpirvBytesNotMultipleOf4(#[from] vulkano::shader::spirv::SpirvBytesNotMultipleOf4),
 
@@ -83,9 +76,14 @@ pub enum ChimeraError {
     #[error("vulkano ValidatedAllocateBufferError: {0}")]
     VulkanoBoxedValidationError(#[from] Box<vulkano::ValidationError>),
 
-    // #[cfg(feature = "vulkano")]
-    // #[error("vulkano VulkanoValidatedValidationError: {0}")]
-    // VulkanoValidatedValidationError(#[from] Validated<vulkano::ValidationError>),
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano VulkanoValidatedValidationError: {0}")]
+    VulkanoValidatedValidationError(#[from] Validated<vulkano::ValidationError>),
+
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano VulkanoValidatedValidationError: {0}")]
+    VulkanoValidatedVulkanError(#[from] Validated<vulkano::VulkanError>),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -103,18 +101,6 @@ impl From<Box<dyn std::error::Error>> for ChimeraError {
 impl From<ash::vk::Result> for ChimeraError {
     fn from(err: ash::vk::Result) -> Self {
         ChimeraError::Vulkan(format!("Vulkan error: {err:?}"))
-    }
-}
-
-#[cfg(feature = "vulkano")]
-impl From<vulkano::Validated<vulkano::VulkanError>> for ChimeraError {
-    fn from(err: vulkano::Validated<vulkano::VulkanError>) -> Self {
-        match err {
-            vulkano::Validated::Error(e) => ChimeraError::VulkanoValidatedOtherError(e),
-            vulkano::Validated::ValidationError(e) => {
-                ChimeraError::VulkanoValidatedValidationError(*e)
-            }
-        }
     }
 }
 
