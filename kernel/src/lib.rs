@@ -159,3 +159,28 @@ pub fn bitonic_kernel(
         sort_order,
     );
 }
+
+fn add_update(mut a: u32, b: u32) {
+    a += b
+}
+
+/// GPU entry point for Vulkan/SPIR-V
+#[cfg(target_arch = "spirv")]
+#[spirv(compute(threads(256)))]
+pub fn add_kernel(
+    #[spirv(global_invocation_id)] gid: UVec3,
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] a: &mut [u32],
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] b: &[u32],
+    #[spirv(push_constant)] params: &BitonicParams,
+) {
+    let thread_id = ThreadId::new(gid.x);
+
+    // Convert u32 to SortOrder
+    let sort_order = if params.sort_order == 0 {
+        SortOrder::Ascending
+    } else {
+        SortOrder::Descending
+    };
+
+    add_update(a[thread_id.as_usize()], b[thread_id.as_usize()]);
+}
