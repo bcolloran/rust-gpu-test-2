@@ -6,3 +6,5 @@ tests/Cargo.lock
 rustc-ice-*.txt
 .idea
 .claude/
+
+reference_material/
