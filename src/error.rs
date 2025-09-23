@@ -39,6 +39,21 @@ pub enum ChimeraError {
     #[error("vulkano error: {0}")]
     Vulkano(String),
 
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano LoadingError: {0}")]
+    VulkanoLoadingError(#[from] vulkano::LoadingError),
+
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano VulkanError: {0}")]
+    VulkanoVulkanError(#[from] vulkano::VulkanError),
+
+    #[cfg(feature = "vulkano")]
+    #[error("vulkano ValidationError: {0}")]
+    VulkanoValidationError(#[from] vulkano::ValidationError),
+
+    // #[cfg(feature = "vulkano")]
+    // #[error("vulkano VulkanError: {0}")]
+    // VulkanoVulkanError(#[from] vulkano::VulkanError),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -56,20 +71,6 @@ impl From<Box<dyn std::error::Error>> for ChimeraError {
 impl From<ash::vk::Result> for ChimeraError {
     fn from(err: ash::vk::Result) -> Self {
         ChimeraError::Vulkan(format!("Vulkan error: {err:?}"))
-    }
-}
-
-#[cfg(feature = "vulkano")]
-impl From<vulkano::LoadingError> for ChimeraError {
-    fn from(err: vulkano::LoadingError) -> Self {
-        ChimeraError::Vulkano(err.to_string())
-    }
-}
-
-#[cfg(feature = "vulkano")]
-impl From<vulkano::VulkanError> for ChimeraError {
-    fn from(err: vulkano::VulkanError) -> Self {
-        ChimeraError::Vulkano(err.to_string())
     }
 }
 
