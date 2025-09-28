@@ -88,6 +88,30 @@ where
     }
 }
 
+fn run_add_test<R>(runner: &R, a: &mut [u32], b: &[u32]) -> Result<()>
+where
+    R: SortRunner,
+{
+    // Get and log backend info
+    let (host, backend, adapter, driver) = runner.backend_info();
+    log_backend_info(host, backend, adapter.as_deref(), driver.as_deref());
+
+    let len = a.len();
+    let original_first_10_a = a[..10.min(len)].to_vec();
+    let original_first_10_b = b[..10.min(len)].to_vec();
+
+    runner.add(a, b)?;
+    println!("  ➕ Addition operation completed successfully.");
+
+    // Display results
+    println!("\n  Original `a` (first 10 ): {original_first_10_a:?}");
+    println!("  Original `b` (first 10 ): {original_first_10_b:?}");
+
+    println!("  Result `a + b` (first 10): {:?}", &a[..10.min(len)]);
+
+    Ok(())
+}
+
 fn run_test_on_backend<T>(data: &mut [T], test_type: &str, order: SortOrder) -> Result<()>
 where
     T: SortableKey + bytemuck::Pod + Send + Sync + std::fmt::Debug + PartialOrd + Clone,
@@ -126,6 +150,11 @@ where
         if !gpu_executed {
             if let Ok(runner) = VulkanoRunner::new() {
                 run_sort_test(&runner, data, test_type, order)?;
+                // run_add_test(
+                //     &runner,
+                //     &mut vec![1u32; data.len()],
+                //     &vec![2u32; data.len()],
+                // )?;
                 gpu_executed = true;
             } else if let Err(e) = VulkanoRunner::new() {
                 eprintln!("  Vulkano initialization failed: {e}");

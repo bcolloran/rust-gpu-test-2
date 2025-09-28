@@ -1,5 +1,14 @@
 [workspace]
-members = ["kernel", "shared", "sparkler", "sparkler_macros", "sparkler_test"]
+resolver = "2"
+members = [
+  "kernel",
+  "shared",
+  "sparkler",
+  "sparkler_macros",
+  "sparkler_test",
+  "sparkler_builder",
+  "compute-shader",
+]
 
 [package]
 name = "rust-gpu-chimera-demo"
@@ -26,6 +35,7 @@ parking_lot = "0.12"
 rayon = "1.8"
 rand = "0.8"
 
+
 # Vulkan dependencies (wgpu)
 wgpu = { version = "26.0", features = [
   "spirv",
@@ -46,17 +56,9 @@ vulkano = { version = "0.35.2", optional = true }
 thiserror = "1.0"
 anyhow = "1.0"
 
-# CUDA dependencies (only on non-macOS platforms)
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-cust = { git = "https://github.com/Rust-GPU/Rust-CUDA", branch = "main", default-features = false, features = [
-  "glam",
-], optional = true }
 
 [build-dependencies]
 spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main", optional = true }
-
-[target.'cfg(not(target_os = "macos"))'.build-dependencies]
-cuda_builder = { git = "https://github.com/Rust-GPU/Rust-CUDA", branch = "main", optional = true }
 
 
 [workspace.lints.rust]
@@ -64,5 +66,5 @@ unexpected_cfgs = { level = "allow", check-cfg = [
   'cfg(target_arch, values("spirv"))',
 ] }
 
-[patch.crates-io]
-num-traits = { git = "https://github.com/rust-num/num-traits", branch = "master" }
+# [patch.crates-io]
+# num-traits = { git = "https://github.com/rust-num/num-traits", branch = "master" }

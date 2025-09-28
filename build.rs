@@ -1,7 +1,6 @@
 //! Build script for compiling kernels to SPIR-V and CUDA PTX
 fn main() {
     println!("cargo:rerun-if-changed=kernel/src");
-    println!("cargo:warning=BUILDING KERNELS...");
     // Only build kernels when the appropriate features are enabled
     #[cfg(any(feature = "vulkan", feature = "wgpu"))]
     build_spirv_kernel();
@@ -20,6 +19,10 @@ fn build_spirv_kernel() {
         .build()
         .unwrap();
 
+    println!(
+        "cargo:warning=building SPIRV to: {}",
+        result.module.unwrap_single().display()
+    );
     // Export the kernel path for the runtime to use
     println!(
         "cargo:rustc-env=BITONIC_KERNEL_SPV_PATH={}",
@@ -31,4 +34,12 @@ fn build_spirv_kernel() {
         "cargo:rustc-env=BITONIC_KERNEL_SPV_ENTRY={}",
         result.entry_points.first().unwrap()
     );
+
+    println!(
+        "cargo:rustc-env=OTHER_SHADERS_SPV_PATH=/data/code_projects/rust/rust-gpu-sparkler/target/spirv-builder/spirv-unknown-vulkan1.1/release/deps/compute_shader.spv"
+    );
+
+    // Use the first entry point
+    println!("cargo:rustc-env=OTHER_SHADERS_ENTRY_ADDER=adder",);
+    println!("cargo:rustc-env=OTHER_SHADERS_ENTRY_MULT=mult::mult",);
 }

@@ -43,6 +43,8 @@ pub trait SortRunner {
     /// * `params` - Bitonic sort parameters for this pass
     fn execute_kernel_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()>;
 
+    fn execute_adder_kernel_pass(&self, a: &mut [u32], b: &[u32]) -> Result<()>;
+
     /// Prepare data by converting to `u32` representation
     fn prepare_data<T: SortableKey>(&self, data: &[T]) -> (Vec<u32>, usize) {
         let gpu_data: Vec<u32> = data.iter().map(|x| x.to_sortable_u32()).collect();
@@ -80,6 +82,11 @@ pub trait SortRunner {
         Ok(())
     }
 
+    fn run_adder_pass(&self, a: &mut [u32], b: &[u32]) -> Result<()> {
+        assert_eq!(a.len(), b.len());
+        self.execute_adder_kernel_pass(a, b)
+    }
+
     /// Convert sorted `u32` data back to original type
     fn finalize_data<T: SortableKey>(&self, gpu_data: &[u32], output: &mut [T]) {
         for (i, &val) in gpu_data.iter().take(output.len()).enumerate() {
@@ -108,6 +115,11 @@ pub trait SortRunner {
 
         Ok(())
     }
+
+    fn add(&self, a: &mut [u32], b: &[u32]) -> Result<()> {
+        assert_eq!(a.len(), b.len());
+        self.run_adder_pass(a, b)
+    }
 }
 
 // Re-export runners for convenience
@@ -125,6 +137,9 @@ pub use runners::VulkanoRunner;
 /// Compiled SPIR-V bytecode for the bitonic sort kernel
 #[cfg(any(feature = "wgpu", feature = "ash", feature = "vulkano"))]
 pub const BITONIC_SPIRV: &[u8] = include_bytes!(env!("BITONIC_KERNEL_SPV_PATH"));
+
+#[cfg(any(feature = "vulkano"))]
+pub const OTHER_SHADERS_SPIRV: &[u8] = include_bytes!(env!("OTHER_SHADERS_SPV_PATH"));
 
 /// Verify that a slice is sorted in the specified order
 #[cfg(test)]

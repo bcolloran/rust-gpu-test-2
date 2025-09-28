@@ -10,6 +10,9 @@ use vulkano::{
 /// Error types for the Rust GPU Chimera demo
 #[derive(Error, Debug)]
 pub enum ChimeraError {
+    #[error("Environment variable error: {0}")]
+    VarError(#[from] std::env::VarError),
+
     #[error("No suitable GPU adapter found")]
     NoAdapter,
 
@@ -81,7 +84,7 @@ pub enum ChimeraError {
     VulkanoValidatedValidationError(#[from] Validated<vulkano::ValidationError>),
 
     #[cfg(feature = "vulkano")]
-    #[error("vulkano VulkanoValidatedValidationError: {0}")]
+    #[error("vulkano VulkanoValidatedVulkanError: {0}")]
     VulkanoValidatedVulkanError(#[from] Validated<vulkano::VulkanError>),
 
     #[error("IO error: {0}")]
