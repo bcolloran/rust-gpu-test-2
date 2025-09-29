@@ -7,7 +7,7 @@ members = [
   "sparkler_macros",
   "sparkler_test",
   "sparkler_builder",
-  "compute-shader",
+  "operators",
 ]
 
 [package]

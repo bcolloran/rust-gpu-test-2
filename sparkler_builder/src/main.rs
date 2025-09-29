@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::current_dir()?.display()
     );
 
-    let build_result = SpirvBuilder::new("../compute-shader", "spirv-unknown-vulkan1.2")
+    let build_result = SpirvBuilder::new("../operators", "spirv-unknown-vulkan1.2")
         .print_metadata(MetadataPrintout::Full)
         .build();
 

@@ -260,15 +260,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "compute-shader"
-version = "0.0.0"
-dependencies = [
- "rayon",
- "spirv-builder",
- "spirv-std",
-]
-
-[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1168,6 +1159,15 @@ name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
+
+[[package]]
+name = "operators"
+version = "0.0.0"
+dependencies = [
+ "rayon",
+ "spirv-builder",
+ "spirv-std",
+]
 
 [[package]]
 name = "ordered-float"

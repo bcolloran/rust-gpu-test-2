@@ -36,7 +36,7 @@ fn build_spirv_kernel() {
     );
 
     println!(
-        "cargo:rustc-env=OTHER_SHADERS_SPV_PATH=/data/code_projects/rust/rust-gpu-sparkler/target/spirv-builder/spirv-unknown-vulkan1.1/release/deps/compute_shader.spv"
+        "cargo:rustc-env=OTHER_SHADERS_SPV_PATH=/data/code_projects/rust/rust-gpu-sparkler/target/spirv-builder/spirv-unknown-vulkan1.2/release/deps/operators.spv"
     );
 
     // Use the first entry point
