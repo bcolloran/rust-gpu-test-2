@@ -7,7 +7,7 @@
 
 use crate::{
     error::{ChimeraError, Result},
-    SortRunner,
+    SortRunner, OTHER_SHADERS_ENTRY_ADDER,
 };
 use shared::{BitonicParams, WORKGROUP_SIZE};
 use std::sync::Arc;
@@ -178,7 +178,7 @@ fn adder_shader_module_entry_point(device: Arc<Device>) -> Result<EntryPoint> {
     };
 
     // Entry point name (same env var as ash runner)
-    let entry_point_name = std::env::var("OTHER_SHADERS_ENTRY_ADDER")?;
+    let entry_point_name = OTHER_SHADERS_ENTRY_ADDER;
     let entry_point = shader_module
         .entry_point(&entry_point_name)
         .ok_or_else(|| {
@@ -219,11 +219,11 @@ fn build_adder_pipeline(device: Arc<Device>) -> Result<Arc<ComputePipeline>> {
         device.clone(),
         PipelineLayoutCreateInfo {
             set_layouts: vec![descriptor_set_layout],
-            push_constant_ranges: vec![PushConstantRange {
-                stages: ShaderStages::COMPUTE,
-                offset: 0,
-                size: std::mem::size_of::<BitonicPushConstants>() as u32,
-            }],
+            // push_constant_ranges: vec![PushConstantRange {
+            //     stages: ShaderStages::COMPUTE,
+            //     offset: 0,
+            //     size: std::mem::size_of::<BitonicPushConstants>() as u32,
+            // }],
             ..Default::default()
         },
     )?;
@@ -304,106 +304,106 @@ impl VulkanoRunner {
         })
     }
 
-    // fn run_adder_pass(&self, a: &mut [u32], b: &[u32]) -> Result<()> {
-    //     assert_eq!(a.len(), b.len());
-    //     // Allocate a CPU visible buffer, copy input, run compute, read back
-    //     let len = a.len();
+    fn run_adder_pass(&self, a: &mut [u32], b: &[u32]) -> Result<()> {
+        assert_eq!(a.len(), b.len());
+        // Allocate a CPU visible buffer, copy input, run compute, read back
+        let len = a.len();
 
-    //     // Create buffer (HOST visible & coherent)
-    //     let usage =
-    //         BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
+        // Create buffer (HOST visible & coherent)
+        let usage =
+            BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
 
-    //     let buffer_a: Subbuffer<[u32]> = Buffer::from_iter(
-    //         self.memory_allocator.clone(),
-    //         BufferCreateInfo {
-    //             usage,
-    //             ..Default::default()
-    //         },
-    //         AllocationCreateInfo {
-    //             memory_type_filter: MemoryTypeFilter::PREFER_HOST
-    //                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-    //             ..Default::default()
-    //         },
-    //         a.iter().copied(),
-    //     )?;
+        let buffer_a: Subbuffer<[u32]> = Buffer::from_iter(
+            self.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                ..Default::default()
+            },
+            a.iter().copied(),
+        )?;
 
-    //     let buffer_b: Subbuffer<[u32]> = Buffer::from_iter(
-    //         self.memory_allocator.clone(),
-    //         BufferCreateInfo {
-    //             usage,
-    //             ..Default::default()
-    //         },
-    //         AllocationCreateInfo {
-    //             memory_type_filter: MemoryTypeFilter::PREFER_HOST
-    //                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-    //             ..Default::default()
-    //         },
-    //         b.iter().copied(),
-    //     )?;
+        let buffer_b: Subbuffer<[u32]> = Buffer::from_iter(
+            self.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                ..Default::default()
+            },
+            b.iter().copied(),
+        )?;
 
-    //     // Create descriptor set (binding 0: storage buffer)
-    //     let layout = self
-    //         .adder_pipeline
-    //         .layout()
-    //         .set_layouts()
-    //         .get(0)
-    //         .cloned()
-    //         .ok_or_else(|| {
-    //             ChimeraError::Other("Pipeline missing descriptor set layout 0".into())
-    //         })?;
+        // Create descriptor set (binding 0: storage buffer)
+        let layout = self
+            .adder_pipeline
+            .layout()
+            .set_layouts()
+            .get(0)
+            .cloned()
+            .ok_or_else(|| {
+                ChimeraError::Other("Pipeline missing descriptor set layout 0".into())
+            })?;
 
-    //     let set = DescriptorSet::new(
-    //         self.descriptor_set_allocator.clone(),
-    //         layout,
-    //         [
-    //             WriteDescriptorSet::buffer(0, buffer_a.clone()),
-    //             WriteDescriptorSet::buffer(1, buffer_b.clone()),
-    //         ],
-    //         [],
-    //     )?;
+        let set = DescriptorSet::new(
+            self.descriptor_set_allocator.clone(),
+            layout,
+            [
+                WriteDescriptorSet::buffer(0, buffer_a.clone()),
+                WriteDescriptorSet::buffer(1, buffer_b.clone()),
+            ],
+            [],
+        )?;
 
-    //     // Build command buffer
-    //     let mut builder = AutoCommandBufferBuilder::primary(
-    //         self.command_buffer_allocator.clone(),
-    //         self.queue.queue_family_index(),
-    //         CommandBufferUsage::OneTimeSubmit,
-    //     )?;
+        // Build command buffer
+        let mut builder = AutoCommandBufferBuilder::primary(
+            self.command_buffer_allocator.clone(),
+            self.queue.queue_family_index(),
+            CommandBufferUsage::OneTimeSubmit,
+        )?;
 
-    //     builder.bind_pipeline_compute(self.adder_pipeline.clone())?;
-    //     builder.bind_descriptor_sets(
-    //         PipelineBindPoint::Compute,
-    //         self.adder_pipeline.layout().clone(),
-    //         0,
-    //         set,
-    //     )?;
+        builder.bind_pipeline_compute(self.adder_pipeline.clone())?;
+        builder.bind_descriptor_sets(
+            PipelineBindPoint::Compute,
+            self.adder_pipeline.layout().clone(),
+            0,
+            set,
+        )?;
 
-    //     // Push constants
-    //     // builder.push_constants(
-    //     //     self.pipeline.layout().clone(),
-    //     //     0,
-    //     //     BitonicPushConstants(params),
-    //     // )?;
+        // Push constants
+        // builder.push_constants(
+        //     self.pipeline.layout().clone(),
+        //     0,
+        //     BitonicPushConstants(params),
+        // )?;
 
-    //     // Dispatch
-    //     let num_workgroups = (len as u32).div_ceil(WORKGROUP_SIZE);
-    //     unsafe {
-    //         builder.dispatch([num_workgroups, 1, 1])?;
-    //     }
+        // Dispatch
+        let num_workgroups = (len as u32).div_ceil(WORKGROUP_SIZE);
+        unsafe {
+            builder.dispatch([num_workgroups, 1, 1])?;
+        }
 
-    //     let command_buffer = builder.build()?;
+        let command_buffer = builder.build()?;
 
-    //     // Execute + wait
-    //     let future = sync::now(self.device.clone())
-    //         .then_execute(self.queue.clone(), command_buffer)?
-    //         .then_signal_fence_and_flush()?;
-    //     future.wait(None)?;
+        // Execute + wait
+        let future = sync::now(self.device.clone())
+            .then_execute(self.queue.clone(), command_buffer)?
+            .then_signal_fence_and_flush()?;
+        future.wait(None)?;
 
-    //     // Read back results (buffer is host visible)
-    //     let content = buffer_a.read()?;
-    //     a.copy_from_slice(&content[..len]);
+        // Read back results (buffer is host visible)
+        let content = buffer_a.read()?;
+        a.copy_from_slice(&content[..len]);
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 
     fn run_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()> {
         // Allocate a CPU visible buffer, copy input, run compute, read back

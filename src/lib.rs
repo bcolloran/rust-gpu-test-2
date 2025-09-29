@@ -140,6 +140,8 @@ pub const BITONIC_SPIRV: &[u8] = include_bytes!(env!("BITONIC_KERNEL_SPV_PATH"))
 
 #[cfg(any(feature = "vulkano"))]
 pub const OTHER_SHADERS_SPIRV: &[u8] = include_bytes!(env!("OTHER_SHADERS_SPV_PATH"));
+#[cfg(any(feature = "vulkano"))]
+pub const OTHER_SHADERS_ENTRY_ADDER: &str = env!("OTHER_SHADERS_ENTRY_ADDER");
 
 /// Verify that a slice is sorted in the specified order
 #[cfg(test)]

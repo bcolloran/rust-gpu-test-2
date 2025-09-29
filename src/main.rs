@@ -150,11 +150,12 @@ where
         if !gpu_executed {
             if let Ok(runner) = VulkanoRunner::new() {
                 run_sort_test(&runner, data, test_type, order)?;
-                // run_add_test(
-                //     &runner,
-                //     &mut vec![1u32; data.len()],
-                //     &vec![2u32; data.len()],
-                // )?;
+                run_add_test(
+                    &runner,
+                    &mut vec![1u32; data.len()],
+                    &(0..data.len() as u32).collect::<Vec<u32>>(),
+                    // &vec![2u32; data.len()],
+                )?;
                 gpu_executed = true;
             } else if let Err(e) = VulkanoRunner::new() {
                 eprintln!("  Vulkano initialization failed: {e}");
