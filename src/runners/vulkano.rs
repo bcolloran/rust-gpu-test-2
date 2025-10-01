@@ -15,9 +15,10 @@ use std::sync::Arc;
 // Vulkano imports (version 0.35 API)
 use std::collections::BTreeMap;
 use vulkano::{
-    buffer::{self, Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
+        PrimaryAutoCommandBuffer,
     },
     descriptor_set::{
         allocator::StandardDescriptorSetAllocator,
@@ -325,47 +326,49 @@ impl VulkanoRunner {
         Ok(buffer)
     }
 
+    /// Small helper to build a descriptor set for (a, rhs)
+    fn make_adder_set(
+        &self,
+        layout: std::sync::Arc<vulkano::descriptor_set::layout::DescriptorSetLayout>,
+        a: Subbuffer<[u32]>,
+        rhs: Subbuffer<[u32]>,
+    ) -> Result<std::sync::Arc<DescriptorSet>> {
+        let writes = [
+            WriteDescriptorSet::buffer(0, a),
+            WriteDescriptorSet::buffer(1, rhs),
+        ];
+        let set = DescriptorSet::new(self.descriptor_set_allocator.clone(), layout, writes, [])?;
+        Ok(set)
+    }
+
+    fn bind_descriptor_sets_and_dispatch(
+        &self,
+        builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        set: Arc<DescriptorSet>,
+        num_wg: u32,
+    ) -> Result<()> {
+        builder.bind_descriptor_sets(
+            PipelineBindPoint::Compute,
+            self.adder_pipeline.layout().clone(),
+            0,
+            set,
+        )?;
+        unsafe {
+            builder.dispatch([num_wg, 1, 1])?;
+        }
+        Ok(())
+    }
+
     fn run_adder_pass(&self, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()> {
         assert_eq!(a.len(), b.len());
         // Allocate a CPU visible buffer, copy input, run compute, read back
         let len = a.len();
+        let num_workgroups = (len as u32).div_ceil(WORKGROUP_SIZE);
 
         let buffer_a = self.build_buffer(a)?;
         let buffer_b = self.build_buffer(b)?;
         let buffer_c = self.build_buffer(c)?;
         let buffer_d = self.build_buffer(d)?;
-
-        // Create buffer (HOST visible & coherent)
-        // let usage =
-        //     BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
-
-        // let buffer_a: Subbuffer<[u32]> = Buffer::from_iter(
-        //     self.memory_allocator.clone(),
-        //     BufferCreateInfo {
-        //         usage,
-        //         ..Default::default()
-        //     },
-        //     AllocationCreateInfo {
-        //         memory_type_filter: MemoryTypeFilter::PREFER_HOST
-        //             | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-        //         ..Default::default()
-        //     },
-        //     a.iter().copied(),
-        // )?;
-
-        // let buffer_b: Subbuffer<[u32]> = Buffer::from_iter(
-        //     self.memory_allocator.clone(),
-        //     BufferCreateInfo {
-        //         usage,
-        //         ..Default::default()
-        //     },
-        //     AllocationCreateInfo {
-        //         memory_type_filter: MemoryTypeFilter::PREFER_HOST
-        //             | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-        //         ..Default::default()
-        //     },
-        //     b.iter().copied(),
-        // )?;
 
         // Create descriptor set (binding 0: storage buffer)
         let layout = self
@@ -378,15 +381,9 @@ impl VulkanoRunner {
                 ChimeraError::Other("Pipeline missing descriptor set layout 0".into())
             })?;
 
-        let set = DescriptorSet::new(
-            self.descriptor_set_allocator.clone(),
-            layout,
-            [
-                WriteDescriptorSet::buffer(0, buffer_a.clone()),
-                WriteDescriptorSet::buffer(1, buffer_b.clone()),
-            ],
-            [],
-        )?;
+        let set_ab = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_b.clone())?;
+        let set_ac = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_c.clone())?;
+        let set_ad = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_d.clone())?;
 
         // Build command buffer
         let mut builder = AutoCommandBufferBuilder::primary(
@@ -395,26 +392,12 @@ impl VulkanoRunner {
             CommandBufferUsage::OneTimeSubmit,
         )?;
 
+        println!("`Ok(builder)`");
         builder.bind_pipeline_compute(self.adder_pipeline.clone())?;
-        builder.bind_descriptor_sets(
-            PipelineBindPoint::Compute,
-            self.adder_pipeline.layout().clone(),
-            0,
-            set,
-        )?;
 
-        // Push constants
-        // builder.push_constants(
-        //     self.pipeline.layout().clone(),
-        //     0,
-        //     BitonicPushConstants(params),
-        // )?;
-
-        // Dispatch
-        let num_workgroups = (len as u32).div_ceil(WORKGROUP_SIZE);
-        unsafe {
-            builder.dispatch([num_workgroups, 1, 1])?;
-        }
+        self.bind_descriptor_sets_and_dispatch(&mut builder, set_ab, num_workgroups)?;
+        self.bind_descriptor_sets_and_dispatch(&mut builder, set_ac, num_workgroups)?;
+        self.bind_descriptor_sets_and_dispatch(&mut builder, set_ad, num_workgroups)?;
 
         let command_buffer = builder.build()?;
 
@@ -430,6 +413,16 @@ impl VulkanoRunner {
 
         Ok(())
     }
+
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
 
     fn run_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()> {
         // Allocate a CPU visible buffer, copy input, run compute, read back
@@ -514,6 +507,16 @@ impl VulkanoRunner {
         Ok(())
     }
 }
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 impl SortRunner for VulkanoRunner {
     fn backend_info(

@@ -155,7 +155,7 @@ where
                     &mut vec![1u32; data.len()],
                     &(0..data.len() as u32).collect::<Vec<u32>>(),
                     &vec![3u32; data.len()],
-                    &vec![2u32; data.len()],
+                    &(0..data.len() as u32).map(|x| x * x).collect::<Vec<u32>>(),
                 )?;
                 gpu_executed = true;
             } else if let Err(e) = VulkanoRunner::new() {
