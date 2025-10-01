@@ -15,7 +15,7 @@ use std::sync::Arc;
 // Vulkano imports (version 0.35 API)
 use std::collections::BTreeMap;
 use vulkano::{
-    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    buffer::{self, Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
     },
@@ -304,42 +304,68 @@ impl VulkanoRunner {
         })
     }
 
-    fn run_adder_pass(&self, a: &mut [u32], b: &[u32]) -> Result<()> {
+    fn build_buffer(&self, data: &[u32]) -> Result<Subbuffer<[u32]>> {
+        let usage =
+            BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
+
+        let buffer: Subbuffer<[u32]> = Buffer::from_iter(
+            self.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                ..Default::default()
+            },
+            data.iter().copied(),
+        )?;
+
+        Ok(buffer)
+    }
+
+    fn run_adder_pass(&self, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()> {
         assert_eq!(a.len(), b.len());
         // Allocate a CPU visible buffer, copy input, run compute, read back
         let len = a.len();
 
+        let buffer_a = self.build_buffer(a)?;
+        let buffer_b = self.build_buffer(b)?;
+        let buffer_c = self.build_buffer(c)?;
+        let buffer_d = self.build_buffer(d)?;
+
         // Create buffer (HOST visible & coherent)
-        let usage =
-            BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
+        // let usage =
+        //     BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
 
-        let buffer_a: Subbuffer<[u32]> = Buffer::from_iter(
-            self.memory_allocator.clone(),
-            BufferCreateInfo {
-                usage,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-                ..Default::default()
-            },
-            a.iter().copied(),
-        )?;
+        // let buffer_a: Subbuffer<[u32]> = Buffer::from_iter(
+        //     self.memory_allocator.clone(),
+        //     BufferCreateInfo {
+        //         usage,
+        //         ..Default::default()
+        //     },
+        //     AllocationCreateInfo {
+        //         memory_type_filter: MemoryTypeFilter::PREFER_HOST
+        //             | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+        //         ..Default::default()
+        //     },
+        //     a.iter().copied(),
+        // )?;
 
-        let buffer_b: Subbuffer<[u32]> = Buffer::from_iter(
-            self.memory_allocator.clone(),
-            BufferCreateInfo {
-                usage,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-                ..Default::default()
-            },
-            b.iter().copied(),
-        )?;
+        // let buffer_b: Subbuffer<[u32]> = Buffer::from_iter(
+        //     self.memory_allocator.clone(),
+        //     BufferCreateInfo {
+        //         usage,
+        //         ..Default::default()
+        //     },
+        //     AllocationCreateInfo {
+        //         memory_type_filter: MemoryTypeFilter::PREFER_HOST
+        //             | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+        //         ..Default::default()
+        //     },
+        //     b.iter().copied(),
+        // )?;
 
         // Create descriptor set (binding 0: storage buffer)
         let layout = self
@@ -510,8 +536,14 @@ impl SortRunner for VulkanoRunner {
         self.run_pass(data, params)
     }
 
-    fn execute_adder_kernel_pass(&self, a: &mut [u32], b: &[u32]) -> Result<()> {
-        self.run_adder_pass(a, b)
+    fn execute_adder_kernel_pass(
+        &self,
+        a: &mut [u32],
+        b: &[u32],
+        c: &[u32],
+        d: &[u32],
+    ) -> Result<()> {
+        self.run_adder_pass(a, b, c, d)
     }
 }
 

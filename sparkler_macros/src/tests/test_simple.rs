@@ -6,41 +6,22 @@ use crate::expand_op_fn_macro;
 
 #[test]
 fn test_simple() {
-    let input = parse_quote! {
-        #[op_fn]
-        fn add((a, b): (u64, u64)) -> u64 {
-            a + b
-        }
+    let input: syn::ItemFn = parse_quote! {
+        fn add((a, b): (u64, u64)) -> u64 { a + b }
     };
 
     let expected = quote! {
-        fn add3_inner((a, b): (u64, u64)) -> u64 {
-            a + b
-        }
+        fn add__op_fn_inner((a, b): (u64, u64)) -> u64 { a + b }
 
         #[allow(non_camel_case_types)]
-        pub struct Op_add3;
+        struct addOpFn;
 
-        impl ::sparkler::FnTokens for Op_add3 {
-            fn to_tokens() -> proc_macro2::TokenStream {
-                quote::quote! {
-                    fn add2((a, b): (u64, u64)) -> u64 {
-                        a + b
-                    }
-                }
-            }
-        }
+        impl ::sparkler::FnTokens for addOpFn { fn to_tokens() -> proc_macro2::TokenStream { ::quote::quote! { fn add((a, b): (u64, u64)) -> u64 { a + b } } } }
 
         #[allow(non_upper_case_globals)]
-        pub const add: OpFn<(u64, u64), u64, Op_add3> = OpFn {
-            fn_marker: std::marker::PhantomData,
-            str: "
-fn add2((a, b): (u64, u64)) -> u64 {
-     a + b
-}
-",
-            f: add3_inner,
-        };
+        const add: ::sparkler::OpFn<(u64, u64), u64, addOpFn> = ::sparkler::OpFn::new(
+        "\nfn add ((a , b) : (u64 , u64)) -> u64 { a + b }\n",
+        add__op_fn_inner);
     };
 
     let actual = expand_op_fn_macro(input);

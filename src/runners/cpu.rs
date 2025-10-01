@@ -38,10 +38,19 @@ impl SortRunner for CpuRunner {
         Ok(())
     }
 
-    fn execute_adder_kernel_pass(&self, a: &mut [u32], b: &[u32]) -> Result<()> {
+    fn execute_adder_kernel_pass(
+        &self,
+        a: &mut [u32],
+        b: &[u32],
+        c: &[u32],
+        d: &[u32],
+    ) -> Result<()> {
         assert_eq!(a.len(), b.len());
         for i in 0..a.len() {
-            a[i] = a[i].wrapping_add(b[i]);
+            a[i] = a[i]
+                .wrapping_add(b[i])
+                .wrapping_add(c[i])
+                .wrapping_add(d[i]);
         }
         Ok(())
     }

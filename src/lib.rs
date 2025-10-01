@@ -43,7 +43,13 @@ pub trait SortRunner {
     /// * `params` - Bitonic sort parameters for this pass
     fn execute_kernel_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()>;
 
-    fn execute_adder_kernel_pass(&self, a: &mut [u32], b: &[u32]) -> Result<()>;
+    fn execute_adder_kernel_pass(
+        &self,
+        a: &mut [u32],
+        b: &[u32],
+        c: &[u32],
+        d: &[u32],
+    ) -> Result<()>;
 
     /// Prepare data by converting to `u32` representation
     fn prepare_data<T: SortableKey>(&self, data: &[T]) -> (Vec<u32>, usize) {
@@ -82,9 +88,9 @@ pub trait SortRunner {
         Ok(())
     }
 
-    fn run_adder_pass(&self, a: &mut [u32], b: &[u32]) -> Result<()> {
+    fn run_adder_pass(&self, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()> {
         assert_eq!(a.len(), b.len());
-        self.execute_adder_kernel_pass(a, b)
+        self.execute_adder_kernel_pass(a, b, c, d)
     }
 
     /// Convert sorted `u32` data back to original type
@@ -116,9 +122,9 @@ pub trait SortRunner {
         Ok(())
     }
 
-    fn add(&self, a: &mut [u32], b: &[u32]) -> Result<()> {
+    fn add(&self, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()> {
         assert_eq!(a.len(), b.len());
-        self.run_adder_pass(a, b)
+        self.run_adder_pass(a, b, c, d)
     }
 }
 

@@ -2,6 +2,11 @@
 
 #![no_std]
 
+pub struct RowA {
+    pub x: u32,
+    pub y: f32,
+}
+
 use bytemuck::{Pod, Zeroable};
 use core::fmt::{self, Display};
 

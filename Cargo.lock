@@ -1176,6 +1176,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ops"
+version = "0.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "rayon",
+ "shared",
+ "sparkler",
+ "spirv-builder",
+ "spirv-std",
+]
+
+[[package]]
 name = "ordered-float"
 version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1753,6 +1766,7 @@ version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
+ "sparkler_macros",
  "syn",
 ]
 
@@ -1780,6 +1794,7 @@ dependencies = [
 name = "sparkler_test"
 version = "0.1.0"
 dependencies = [
+ "ops",
  "sparkler",
 ]
 

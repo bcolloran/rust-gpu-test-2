@@ -88,7 +88,7 @@ where
     }
 }
 
-fn run_add_test<R>(runner: &R, a: &mut [u32], b: &[u32]) -> Result<()>
+fn run_add_test<R>(runner: &R, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()>
 where
     R: SortRunner,
 {
@@ -100,7 +100,7 @@ where
     let original_first_10_a = a[..10.min(len)].to_vec();
     let original_first_10_b = b[..10.min(len)].to_vec();
 
-    runner.add(a, b)?;
+    runner.add(a, b, c, d)?;
     println!("  ➕ Addition operation completed successfully.");
 
     // Display results
@@ -154,7 +154,8 @@ where
                     &runner,
                     &mut vec![1u32; data.len()],
                     &(0..data.len() as u32).collect::<Vec<u32>>(),
-                    // &vec![2u32; data.len()],
+                    &vec![3u32; data.len()],
+                    &vec![2u32; data.len()],
                 )?;
                 gpu_executed = true;
             } else if let Err(e) = VulkanoRunner::new() {
@@ -172,7 +173,7 @@ where
 }
 
 fn main() -> Result<()> {
-    println!("{}", sparkler_test::add(1, 3));
+    // println!("{}", sparkler_test::add(1, 3));
 
     print_header();
 
