@@ -8,6 +8,8 @@ members = [
   "sparkler_test",
   "sparkler_builder",
   "operators",
+  "sparkler_gen_kernels_sketch",
+  "sparkler_gen_graph_sketch",
 ]
 
 [package]

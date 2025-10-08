@@ -1,0 +1,17 @@
+[package]
+name = "sparkler_gen_kernels_sketch"
+version = "0.0.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+spirv-std = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main" }
+shared = { path = "../shared" }
+
+[build-dependencies]
+spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main" }

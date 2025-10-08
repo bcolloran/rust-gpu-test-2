@@ -7,9 +7,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::current_dir()?.display()
     );
 
-    let build_result = SpirvBuilder::new("../operators", "spirv-unknown-vulkan1.2")
-        .print_metadata(MetadataPrintout::Full)
-        .build();
+    let build_result =
+        SpirvBuilder::new("../sparkler_gen_kernels_sketch", "spirv-unknown-vulkan1.2")
+            .print_metadata(MetadataPrintout::Full)
+            .build();
 
     if let Ok(result) = build_result {
         println!(
