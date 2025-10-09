@@ -1,16 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-  "kernel",
-  "shared",
-  "sparkler",
-  "sparkler_macros",
-  "sparkler_test",
-  "sparkler_builder",
-  "operators",
-  "sparkler_gen_kernels_sketch",
-  "sparkler_gen_graph_sketch",
-]
+members = ["shared", "shaders"]
 
 [package]
 name = "rust-gpu-chimera-demo"
@@ -21,15 +11,11 @@ license = "MIT OR Apache-2.0"
 [features]
 default = ["vulkan", "vulkano"]
 vulkan = ["spirv-builder"]
-wgpu = ["dep:wgpu", "pollster", "futures", "spirv-builder"]
-ash = ["vulkan", "dep:ash", "ash-window", "raw-window-handle"]
 vulkano = ["vulkan", "dep:vulkano"]
 
 [dependencies]
 # Shared dependencies
 shared = { path = "shared" }
-kernel = { path = "kernel", features = [] }
-sparkler_test = { path = "sparkler_test" }
 glam = "0.24"
 bytemuck = { version = "1.14" }
 num_cpus = "1.16"
@@ -37,6 +23,7 @@ parking_lot = "0.12"
 rayon = "1.8"
 rand = "0.8"
 smallvec = "1.15.1"
+facet = "0.29.1"
 
 # Vulkan dependencies (wgpu)
 wgpu = { version = "26.0", features = [
@@ -67,6 +54,3 @@ spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main",
 unexpected_cfgs = { level = "allow", check-cfg = [
   'cfg(target_arch, values("spirv"))',
 ] }
-
-# [patch.crates-io]
-# num-traits = { git = "https://github.com/rust-num/num-traits", branch = "master" }

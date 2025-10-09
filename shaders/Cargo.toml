@@ -1,12 +1,7 @@
 [package]
-name = "ops"
+name = "shaders"
 version = "0.0.0"
 edition = "2021"
-# publish = false
-# authors.workspace = true
-# edition.workspace = true
-# license.workspace = true
-# repository.workspace = true
 
 [lints]
 workspace = true
@@ -17,14 +12,10 @@ crate-type = ["cdylib", "rlib"]
 
 
 [dependencies]
-sparkler = { path = "../sparkler" }
-shared = { path = "../shared" }
-
+## To depend on a crate that lives inside a Git workspace, you only need the git URL (and
+## optionally branch/rev/tag). Cargo will clone the repo and then pick the crate named
+## `spirv-std` from that workspace automatically. You must NOT combine `git` and `path`.
 spirv-std = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main" }
-
-quote = { version = "1" }
-proc-macro2 = "1"
-
 
 [build-dependencies]
 spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main" }

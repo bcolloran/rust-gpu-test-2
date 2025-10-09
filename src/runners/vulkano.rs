@@ -7,7 +7,7 @@
 
 use crate::{
     error::{ChimeraError, Result},
-    SortRunner, OTHER_SHADERS_ENTRY_ADDER,
+    SortRunner, SHADERS_ENTRY_ADDER,
 };
 use shared::{BitonicParams, WORKGROUP_SIZE};
 use std::sync::Arc;
@@ -33,7 +33,7 @@ use vulkano::{
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
     pipeline::{
         compute::{ComputePipeline, ComputePipelineCreateInfo},
-        layout::{PipelineLayout, PipelineLayoutCreateInfo, PushConstantRange},
+        layout::{PipelineLayout, PipelineLayoutCreateInfo},
         Pipeline, PipelineBindPoint, PipelineShaderStageCreateInfo,
     },
     shader::{EntryPoint, ShaderModule, ShaderStages},
@@ -50,7 +50,7 @@ struct BitonicPushConstants(BitonicParams);
 pub struct VulkanoRunner {
     device: Arc<Device>,
     queue: Arc<Queue>,
-    pipeline: Arc<ComputePipeline>,
+    // pipeline: Arc<ComputePipeline>,
     adder_pipeline: Arc<ComputePipeline>,
     memory_allocator: Arc<StandardMemoryAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
@@ -125,39 +125,6 @@ fn vulkano_device_and_compute_queue() -> Result<(String, Arc<Device>, Arc<Queue>
     Ok((device_name, device, queue))
 }
 
-fn bitonic_shader_module_entry_point(device: Arc<Device>) -> Result<EntryPoint> {
-    // 7. Create shader module from embedded SPIR-V
-    let kernel_bytes = crate::BITONIC_SPIRV;
-    // Convert SPIR-V bytes to words then create shader module
-    let words = vulkano::shader::spirv::bytes_to_words(kernel_bytes)?;
-    let shader_module = unsafe {
-        match ShaderModule::new(
-            device.clone(),
-            vulkano::shader::ShaderModuleCreateInfo::new(&words),
-        ) {
-            Ok(m) => m,
-            Err(e) => {
-                // Provide more detailed diagnostics using Debug formatting
-                return Err(ChimeraError::Other(format!(
-                    "Failed to create shader module: {e:?}"
-                )));
-            }
-        }
-    };
-
-    // Entry point name (same env var as ash runner)
-    let entry_point_name =
-        std::env::var("BITONIC_KERNEL_SPV_ENTRY").unwrap_or_else(|_| "bitonic_kernel".to_string());
-    let entry_point = shader_module
-        .entry_point(&entry_point_name)
-        .ok_or_else(|| {
-            ChimeraError::Other(format!(
-                "Entry point '{entry_point_name}' not found in SPIR-V"
-            ))
-        })?;
-    Ok(entry_point)
-}
-
 fn adder_shader_module_entry_point(device: Arc<Device>) -> Result<EntryPoint> {
     // 7. Create shader module from embedded SPIR-V
     let kernel_bytes = crate::OTHER_SHADERS_SPIRV;
@@ -179,7 +146,7 @@ fn adder_shader_module_entry_point(device: Arc<Device>) -> Result<EntryPoint> {
     };
 
     // Entry point name (same env var as ash runner)
-    let entry_point_name = OTHER_SHADERS_ENTRY_ADDER;
+    let entry_point_name = SHADERS_ENTRY_ADDER;
     let entry_point = shader_module
         .entry_point(&entry_point_name)
         .ok_or_else(|| {
@@ -254,49 +221,12 @@ impl VulkanoRunner {
             Default::default(),
         ));
 
-        let entry_point = bitonic_shader_module_entry_point(device.clone())?;
-
-        // Descriptor set layout (binding 0: storage buffer)
-        let mut binding0 =
-            DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
-        binding0.stages = ShaderStages::COMPUTE;
-        binding0.descriptor_count = 1;
-        let mut bindings = BTreeMap::new();
-        bindings.insert(0u32, binding0);
-
-        let descriptor_set_layout = DescriptorSetLayout::new(
-            device.clone(),
-            DescriptorSetLayoutCreateInfo {
-                bindings,
-                ..Default::default()
-            },
-        )?;
-
-        // Pipeline layout + push constants
-        let pipeline_layout = PipelineLayout::new(
-            device.clone(),
-            PipelineLayoutCreateInfo {
-                set_layouts: vec![descriptor_set_layout],
-                push_constant_ranges: vec![PushConstantRange {
-                    stages: ShaderStages::COMPUTE,
-                    offset: 0,
-                    size: std::mem::size_of::<BitonicPushConstants>() as u32,
-                }],
-                ..Default::default()
-            },
-        )?;
-
-        // Build stage and compute pipeline
-        let stage = PipelineShaderStageCreateInfo::new(entry_point.clone());
-        let pipeline_info = ComputePipelineCreateInfo::stage_layout(stage, pipeline_layout.clone());
-        let pipeline = ComputePipeline::new(device.clone(), None, pipeline_info)?;
-
         let adder_pipeline = build_adder_pipeline(device.clone())?;
 
         Ok(Self {
             device,
             queue,
-            pipeline,
+            // pipeline,
             adder_pipeline,
             memory_allocator,
             descriptor_set_allocator,
@@ -413,99 +343,6 @@ impl VulkanoRunner {
 
         Ok(())
     }
-
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-
-    fn run_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()> {
-        // Allocate a CPU visible buffer, copy input, run compute, read back
-        let len = data.len();
-
-        // Create buffer (HOST visible & coherent)
-        let usage =
-            BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
-
-        let buffer: Subbuffer<[u32]> = Buffer::from_iter(
-            self.memory_allocator.clone(),
-            BufferCreateInfo {
-                usage,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-                ..Default::default()
-            },
-            data.iter().copied(),
-        )?;
-
-        // Create descriptor set (binding 0: storage buffer)
-        let layout = self
-            .pipeline
-            .layout()
-            .set_layouts()
-            .get(0)
-            .cloned()
-            .ok_or_else(|| {
-                ChimeraError::Other("Pipeline missing descriptor set layout 0".into())
-            })?;
-
-        let set = DescriptorSet::new(
-            self.descriptor_set_allocator.clone(),
-            layout,
-            [WriteDescriptorSet::buffer(0, buffer.clone())],
-            [],
-        )?;
-
-        // Build command buffer
-        let mut builder = AutoCommandBufferBuilder::primary(
-            self.command_buffer_allocator.clone(),
-            self.queue.queue_family_index(),
-            CommandBufferUsage::OneTimeSubmit,
-        )?;
-
-        builder.bind_pipeline_compute(self.pipeline.clone())?;
-        builder.bind_descriptor_sets(
-            PipelineBindPoint::Compute,
-            self.pipeline.layout().clone(),
-            0,
-            set,
-        )?;
-
-        // Push constants
-        builder.push_constants(
-            self.pipeline.layout().clone(),
-            0,
-            BitonicPushConstants(params),
-        )?;
-
-        // Dispatch
-        let num_workgroups = params.num_elements.div_ceil(WORKGROUP_SIZE);
-        unsafe {
-            builder.dispatch([num_workgroups, 1, 1])?;
-        }
-
-        let command_buffer = builder.build()?;
-
-        // Execute + wait
-        let future = sync::now(self.device.clone())
-            .then_execute(self.queue.clone(), command_buffer)?
-            .then_signal_fence_and_flush()?;
-        future.wait(None)?;
-
-        // Read back results (buffer is host visible)
-        let content = buffer.read()?;
-        data.copy_from_slice(&content[..len]);
-
-        Ok(())
-    }
 }
 
 //
@@ -535,9 +372,9 @@ impl SortRunner for VulkanoRunner {
         )
     }
 
-    fn execute_kernel_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()> {
-        self.run_pass(data, params)
-    }
+    // fn execute_kernel_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()> {
+    //     self.run_pass(data, params)
+    // }
 
     fn execute_adder_kernel_pass(
         &self,
@@ -550,67 +387,67 @@ impl SortRunner for VulkanoRunner {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::VulkanoRunner;
-    use crate::{verify_sorted, SortRunner};
-    use shared::SortOrder;
+// #[cfg(test)]
+// mod tests {
+//     use super::VulkanoRunner;
+//     use crate::{verify_sorted, SortRunner};
+//     use shared::SortOrder;
 
-    #[test]
-    fn test_bitonic_u32() {
-        let runner = VulkanoRunner::new().unwrap();
-        let mut data = vec![42u32, 7, 999, 0, 13, 256, 128, 511];
+//     #[test]
+//     fn test_bitonic_u32() {
+//         let runner = VulkanoRunner::new().unwrap();
+//         let mut data = vec![42u32, 7, 999, 0, 13, 256, 128, 511];
 
-        runner.sort(&mut data, SortOrder::Ascending).unwrap();
-        assert!(verify_sorted(&data, SortOrder::Ascending));
-        assert_eq!(data, vec![0, 7, 13, 42, 128, 256, 511, 999]);
-    }
+//         runner.sort(&mut data, SortOrder::Ascending).unwrap();
+//         assert!(verify_sorted(&data, SortOrder::Ascending));
+//         assert_eq!(data, vec![0, 7, 13, 42, 128, 256, 511, 999]);
+//     }
 
-    #[test]
-    fn test_bitonic_i32() {
-        let runner = VulkanoRunner::new().unwrap();
-        let mut data = vec![-42i32, 7, -999, 0, 13, -256, 128, -1];
+//     #[test]
+//     fn test_bitonic_i32() {
+//         let runner = VulkanoRunner::new().unwrap();
+//         let mut data = vec![-42i32, 7, -999, 0, 13, -256, 128, -1];
 
-        runner.sort(&mut data, SortOrder::Ascending).unwrap();
-        assert!(verify_sorted(&data, SortOrder::Ascending));
-        assert_eq!(data, vec![-999, -256, -42, -1, 0, 7, 13, 128]);
-    }
+//         runner.sort(&mut data, SortOrder::Ascending).unwrap();
+//         assert!(verify_sorted(&data, SortOrder::Ascending));
+//         assert_eq!(data, vec![-999, -256, -42, -1, 0, 7, 13, 128]);
+//     }
 
-    #[test]
-    fn test_bitonic_f32() {
-        let runner = VulkanoRunner::new().unwrap();
-        let mut data = vec![3.14f32, -2.71, 0.0, -0.0, 1.41, -99.9, 42.0];
+//     #[test]
+//     fn test_bitonic_f32() {
+//         let runner = VulkanoRunner::new().unwrap();
+//         let mut data = vec![3.14f32, -2.71, 0.0, -0.0, 1.41, -99.9, 42.0];
 
-        runner.sort(&mut data, SortOrder::Ascending).unwrap();
-        assert!(verify_sorted(&data, SortOrder::Ascending));
-    }
+//         runner.sort(&mut data, SortOrder::Ascending).unwrap();
+//         assert!(verify_sorted(&data, SortOrder::Ascending));
+//     }
 
-    #[test]
-    fn test_bitonic_u32_descending() {
-        let runner = VulkanoRunner::new().unwrap();
-        let mut data = vec![42u32, 7, 999, 0, 13, 256, 128, 511];
+//     #[test]
+//     fn test_bitonic_u32_descending() {
+//         let runner = VulkanoRunner::new().unwrap();
+//         let mut data = vec![42u32, 7, 999, 0, 13, 256, 128, 511];
 
-        runner.sort(&mut data, SortOrder::Descending).unwrap();
-        assert!(verify_sorted(&data, SortOrder::Descending));
-        assert_eq!(data, vec![999, 511, 256, 128, 42, 13, 7, 0]);
-    }
+//         runner.sort(&mut data, SortOrder::Descending).unwrap();
+//         assert!(verify_sorted(&data, SortOrder::Descending));
+//         assert_eq!(data, vec![999, 511, 256, 128, 42, 13, 7, 0]);
+//     }
 
-    #[test]
-    fn test_bitonic_i32_descending() {
-        let runner = VulkanoRunner::new().unwrap();
-        let mut data = vec![-42i32, 7, -999, 0, 13, -256, 128, -1];
+//     #[test]
+//     fn test_bitonic_i32_descending() {
+//         let runner = VulkanoRunner::new().unwrap();
+//         let mut data = vec![-42i32, 7, -999, 0, 13, -256, 128, -1];
 
-        runner.sort(&mut data, SortOrder::Descending).unwrap();
-        assert!(verify_sorted(&data, SortOrder::Descending));
-        assert_eq!(data, vec![128, 13, 7, 0, -1, -42, -256, -999]);
-    }
+//         runner.sort(&mut data, SortOrder::Descending).unwrap();
+//         assert!(verify_sorted(&data, SortOrder::Descending));
+//         assert_eq!(data, vec![128, 13, 7, 0, -1, -42, -256, -999]);
+//     }
 
-    #[test]
-    fn test_bitonic_f32_descending() {
-        let runner = VulkanoRunner::new().unwrap();
-        let mut data = vec![3.14f32, -2.71, 0.0, -0.0, 1.41, -99.9, 42.0];
+//     #[test]
+//     fn test_bitonic_f32_descending() {
+//         let runner = VulkanoRunner::new().unwrap();
+//         let mut data = vec![3.14f32, -2.71, 0.0, -0.0, 1.41, -99.9, 42.0];
 
-        runner.sort(&mut data, SortOrder::Descending).unwrap();
-        assert!(verify_sorted(&data, SortOrder::Descending));
-    }
-}
+//         runner.sort(&mut data, SortOrder::Descending).unwrap();
+//         assert!(verify_sorted(&data, SortOrder::Descending));
+//     }
+// }

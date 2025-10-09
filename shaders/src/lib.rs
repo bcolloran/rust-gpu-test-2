@@ -2,8 +2,13 @@
 // HACK(eddyb) can't easily see warnings otherwise from `spirv-builder` builds.
 #![deny(warnings)]
 
+use core::ops::{Add, AddAssign};
+
 use glam::UVec3;
-use spirv_std::{glam, spirv};
+use spirv_std::{
+    glam::{self, Vec2},
+    spirv,
+};
 
 pub mod mult;
 
@@ -52,7 +57,7 @@ pub fn main_cs(
     prime_indices[index] = collatz(prime_indices[index]).unwrap_or(u32::MAX);
 }
 
-fn add_update(a: &mut u32, b: u32) {
+fn add_update<T: Add + AddAssign>(a: &mut T, b: T) {
     *a += b
 }
 
@@ -64,4 +69,14 @@ pub fn adder(
 ) {
     let i = id.x as usize;
     add_update(&mut a[i], b[i]);
+}
+
+#[spirv(compute(threads(64)))]
+pub fn step_particles(
+    #[spirv(global_invocation_id)] id: UVec3,
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] x: &mut [Vec2],
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] v: &[Vec2],
+) {
+    let i = id.x as usize;
+    add_update(&mut x[i], v[i]);
 }

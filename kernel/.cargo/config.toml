@@ -1,7 +1,0 @@
-# # YOUR_SHADER_CRATE/.cargo/config.toml
-# [build]
-# # If you actually build SPIR-V by default:
-# target = "spirv-unknown-unknown"
-
-# # And/or force the cfg seen by rustc (and thus by rust-analyzer):
-# rustflags = ['--cfg', 'target_arch="spirv"']

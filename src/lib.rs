@@ -6,21 +6,11 @@
 
 #![feature(once_cell_try)]
 
-// Feature validation
-
-#[cfg(all(feature = "wgpu", feature = "ash"))]
-compile_error!("Cannot enable both 'wgpu' and 'ash' features at the same time");
-
-// Allow vulkano to be combined for comparison; if exclusivity desired add similar compile_error.
-
-#[cfg(all(target_os = "macos"))]
-compile_error!("The 'cuda' feature is not supported on macOS. CUDA requires NVIDIA GPUs and is only available on Linux and Windows");
-
 pub mod error;
 pub mod runners;
 
 use error::Result;
-use shared::{BitonicParams, Pass, SortOrder, SortableKey, Stage};
+use shared::{SortOrder, SortableKey};
 
 /// Common trait for all sorting backends
 pub trait SortRunner {
@@ -41,7 +31,7 @@ pub trait SortRunner {
     /// # Arguments
     /// * `data` - The data slice to sort in-place
     /// * `params` - Bitonic sort parameters for this pass
-    fn execute_kernel_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()>;
+    // fn execute_kernel_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()>;
 
     fn execute_adder_kernel_pass(
         &self,
@@ -69,25 +59,6 @@ pub trait SortRunner {
         }
     }
 
-    /// Run all bitonic sort stages and passes
-    fn run_bitonic_stages(&self, data: &mut [u32], order: SortOrder) -> Result<()> {
-        let n = data.len() as u32;
-        let num_stages = (n as f32).log2() as u32;
-
-        for stage in 0..num_stages {
-            for pass in 0..=stage {
-                let params = BitonicParams {
-                    num_elements: n,
-                    stage: Stage::new(stage),
-                    pass_of_stage: Pass::new(pass),
-                    sort_order: order.into(),
-                };
-                self.execute_kernel_pass(data, params)?;
-            }
-        }
-        Ok(())
-    }
-
     fn run_adder_pass(&self, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()> {
         assert_eq!(a.len(), b.len());
         self.execute_adder_kernel_pass(a, b, c, d)
@@ -100,54 +71,18 @@ pub trait SortRunner {
         }
     }
 
-    /// Sort data with specified order (ascending or descending)
-    ///
-    /// Sorts the given slice in-place using the bitonic sort algorithm.
-    /// The data is converted to `u32` for sorting, then converted back.
-    fn sort<T: SortableKey + bytemuck::Pod + Send + Sync>(
-        &self,
-        data: &mut [T],
-        order: SortOrder,
-    ) -> Result<()> {
-        if data.len() <= 1 {
-            return Ok(());
-        }
-
-        let (mut gpu_data, original_size) = self.prepare_data(data);
-        self.pad_data(&mut gpu_data, original_size, order);
-        self.run_bitonic_stages(&mut gpu_data, order)?;
-        gpu_data.truncate(original_size);
-        self.finalize_data(&gpu_data, data);
-
-        Ok(())
-    }
-
     fn add(&self, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()> {
         assert_eq!(a.len(), b.len());
         self.run_adder_pass(a, b, c, d)
     }
 }
 
-// Re-export runners for convenience
-pub use runners::CpuRunner;
-
-#[cfg(feature = "wgpu")]
-pub use runners::WgpuRunner;
-
-#[cfg(feature = "ash")]
-pub use runners::AshRunner;
-
-#[cfg(feature = "vulkano")]
 pub use runners::VulkanoRunner;
 
-/// Compiled SPIR-V bytecode for the bitonic sort kernel
-#[cfg(any(feature = "wgpu", feature = "ash", feature = "vulkano"))]
-pub const BITONIC_SPIRV: &[u8] = include_bytes!(env!("BITONIC_KERNEL_SPV_PATH"));
-
 #[cfg(any(feature = "vulkano"))]
-pub const OTHER_SHADERS_SPIRV: &[u8] = include_bytes!(env!("OTHER_SHADERS_SPV_PATH"));
+pub const OTHER_SHADERS_SPIRV: &[u8] = include_bytes!(env!("SHADERS_SPV_PATH"));
 #[cfg(any(feature = "vulkano"))]
-pub const OTHER_SHADERS_ENTRY_ADDER: &str = env!("OTHER_SHADERS_ENTRY_ADDER");
+pub const SHADERS_ENTRY_ADDER: &str = env!("SHADERS_ENTRY_ADDER");
 
 /// Verify that a slice is sorted in the specified order
 #[cfg(test)]

@@ -41,53 +41,6 @@ fn log_backend_info(
     }
 }
 
-fn run_sort_test<T, R>(runner: &R, data: &mut [T], test_type: &str, order: SortOrder) -> Result<()>
-where
-    T: SortableKey + bytemuck::Pod + Send + Sync + std::fmt::Debug + PartialOrd + Clone,
-    R: SortRunner,
-{
-    // Get and log backend info
-    let (host, backend, adapter, driver) = runner.backend_info();
-    log_backend_info(host, backend, adapter.as_deref(), driver.as_deref());
-
-    let len = data.len();
-    let original_first_10 = data[..10.min(len)].to_vec();
-    let original_last_10 = if len > 10 {
-        data[len - 10..].to_vec()
-    } else {
-        vec![]
-    };
-
-    runner.sort(data, order)?;
-
-    // Verify sort
-    let is_sorted = match order {
-        SortOrder::Ascending => data.windows(2).all(|w| w[0] <= w[1]),
-        SortOrder::Descending => data.windows(2).all(|w| w[0] >= w[1]),
-    };
-
-    // Display results
-    println!("\n  Original (first 10): {original_first_10:?}");
-    if !original_last_10.is_empty() {
-        println!("  Original (last 10):  {original_last_10:?}");
-    }
-    println!("  Sorted (first 10):   {:?}", &data[..10.min(len)]);
-    if len > 10 {
-        println!("  Sorted (last 10):    {:?}", &data[len - 10..]);
-    }
-
-    if is_sorted {
-        println!("\n  ✅ {test_type} sort ({order}): PASSED ({len} elements)");
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!(
-            "{} sort ({}) failed: array not properly sorted",
-            test_type,
-            order
-        ))
-    }
-}
-
 fn run_add_test<R>(runner: &R, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()>
 where
     R: SortRunner,
@@ -119,40 +72,12 @@ fn run_test_on_backend<T>(data: &mut [T], test_type: &str, order: SortOrder) -> 
 where
     T: SortableKey + bytemuck::Pod + Send + Sync + std::fmt::Debug + PartialOrd + Clone,
 {
-    #[cfg(not(any(feature = "wgpu", feature = "ash", feature = "vulkano")))]
-    {
-        let runner = CpuRunner;
-        run_sort_test(&runner, data, test_type, order)?;
-    }
-
-    #[cfg(any(feature = "wgpu", feature = "ash", feature = "vulkano"))]
     {
         let mut gpu_executed = false;
 
-        #[cfg(feature = "wgpu")]
-        if !gpu_executed {
-            if let Ok(runner) = futures::executor::block_on(WgpuRunner::new()) {
-                run_sort_test(&runner, data, test_type, order)?;
-                gpu_executed = true;
-            } else if let Err(e) = futures::executor::block_on(WgpuRunner::new()) {
-                eprintln!("  wgpu initialization failed: {e}");
-            }
-        }
-
-        #[cfg(feature = "ash")]
-        if !gpu_executed {
-            if let Ok(runner) = AshRunner::new() {
-                run_sort_test(&runner, data, test_type, order)?;
-                gpu_executed = true;
-            } else if let Err(e) = AshRunner::new() {
-                eprintln!("  Vulkan initialization failed: {e}");
-            }
-        }
-
-        #[cfg(feature = "vulkano")]
         if !gpu_executed {
             if let Ok(runner) = VulkanoRunner::new() {
-                run_sort_test(&runner, data, test_type, order)?;
+                // run_sort_test(&runner, data, test_type, order)?;
                 run_add_test(
                     &runner,
                     &mut vec![1u32; data.len()],
