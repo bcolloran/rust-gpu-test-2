@@ -5,17 +5,25 @@
 //! (RAII) and shortens the amount of boilerplate. The public behaviour is
 //! intended to match `AshRunner` so it can be swapped transparently.
 
+pub mod buffer;
+pub mod descriptor_sets;
+pub mod device;
+pub mod pipeline;
+pub mod shader;
+pub mod shader_buffer_mapping;
+
 use crate::{
     error::{ChimeraError, Result},
+    runners::vulkano::{buffer::build_and_fill_buffer, device::compute_capable_device_and_queue},
     SortRunner, SHADERS_ENTRY_ADDER,
 };
-use shared::{BitonicParams, WORKGROUP_SIZE};
+use shared::WORKGROUP_SIZE;
 use std::sync::Arc;
 
 // Vulkano imports (version 0.35 API)
 use std::collections::BTreeMap;
 use vulkano::{
-    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    buffer::Subbuffer,
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
         PrimaryAutoCommandBuffer,
@@ -28,29 +36,21 @@ use vulkano::{
         },
         DescriptorSet, WriteDescriptorSet,
     },
-    device::{Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, Queue, QueueCreateInfo},
-    instance::{Instance, InstanceCreateInfo},
-    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
+    device::{Device, Queue},
+    memory::allocator::StandardMemoryAllocator,
     pipeline::{
         compute::{ComputePipeline, ComputePipelineCreateInfo},
         layout::{PipelineLayout, PipelineLayoutCreateInfo},
         Pipeline, PipelineBindPoint, PipelineShaderStageCreateInfo,
     },
-    shader::{EntryPoint, ShaderModule, ShaderStages},
+    shader::ShaderStages,
     sync::{self, GpuFuture},
-    VulkanLibrary,
 };
-
-// Local wrapper enabling push constants (derives bytemuck traits so vulkano blanket impl applies)
-#[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct BitonicPushConstants(BitonicParams);
 
 /// Vulkan-based runner for bitonic sort using vulkano safe abstractions
 pub struct VulkanoRunner {
     device: Arc<Device>,
     queue: Arc<Queue>,
-    // pipeline: Arc<ComputePipeline>,
     adder_pipeline: Arc<ComputePipeline>,
     memory_allocator: Arc<StandardMemoryAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
@@ -58,108 +58,9 @@ pub struct VulkanoRunner {
     device_name: String,
 }
 
-fn vulkano_device_and_compute_queue() -> Result<(String, Arc<Device>, Arc<Queue>)> {
-    // 1. Load the Vulkan library
-    let library = VulkanLibrary::new()?;
-
-    // 2. Create instance
-    let instance = Instance::new(library, InstanceCreateInfo::default())?;
-
-    // 3. Pick first physical device with a compute queue
-    let physical = instance
-        .enumerate_physical_devices()?
-        .next()
-        .ok_or_else(|| ChimeraError::NoVulkanDevice(0))?;
-
-    let device_name = physical.properties().device_name.clone();
-
-    // 4. Select a queue family that supports compute
-    let (queue_family_index, _q_props) = physical
-        .queue_family_properties()
-        .iter()
-        .enumerate()
-        .find(|(_, q)| q.queue_flags.contains(vulkano::device::QueueFlags::COMPUTE))
-        .map(|(i, q)| (i as u32, q.clone()))
-        .ok_or(ChimeraError::NoComputeQueue)?;
-
-    // 5. Create logical device + queue
-    // Enable storage buffer storage class extension (required by generated SPIR-V)
-    // Reference: Vulkano book compute pipeline chapter
-    let required_extensions = DeviceExtensions {
-        khr_storage_buffer_storage_class: true,
-        ..DeviceExtensions::empty()
-    };
-
-    // Enable required device features. Our SPIR-V (from rust-gpu targeting Vulkan 1.2)
-    // uses the VulkanMemoryModel capability, which maps to the `vulkan_memory_model`
-    // device feature. Without enabling this feature, Vulkano validation rejects the
-    // shader module creation (previous runtime error root cause).
-    let mut required_features = DeviceFeatures::empty();
-    required_features.vulkan_memory_model = true;
-
-    // Verify support before requesting so we can provide a clearer error.
-    if !physical.supported_features().contains(&required_features) {
-        return Err(ChimeraError::Other(
-            "Selected physical device does not support required feature: vulkan_memory_model"
-                .into(),
-        ));
-    }
-
-    let (device, mut queues) = Device::new(
-        physical,
-        DeviceCreateInfo {
-            queue_create_infos: vec![QueueCreateInfo {
-                queue_family_index,
-                ..Default::default()
-            }],
-            enabled_extensions: required_extensions,
-            enabled_features: required_features,
-            ..Default::default()
-        },
-    )?;
-
-    let queue = queues
-        .next()
-        .ok_or_else(|| ChimeraError::Other("Failed to get compute queue".into()))?;
-
-    Ok((device_name, device, queue))
-}
-
-fn adder_shader_module_entry_point(device: Arc<Device>) -> Result<EntryPoint> {
-    // 7. Create shader module from embedded SPIR-V
-    let kernel_bytes = crate::OTHER_SHADERS_SPIRV;
-    // Convert SPIR-V bytes to words then create shader module
-    let words = vulkano::shader::spirv::bytes_to_words(kernel_bytes)?;
-    let shader_module = unsafe {
-        match ShaderModule::new(
-            device.clone(),
-            vulkano::shader::ShaderModuleCreateInfo::new(&words),
-        ) {
-            Ok(m) => m,
-            Err(e) => {
-                // Provide more detailed diagnostics using Debug formatting
-                return Err(ChimeraError::Other(format!(
-                    "Failed to create shader module: {e:?}"
-                )));
-            }
-        }
-    };
-
-    // Entry point name (same env var as ash runner)
-    let entry_point_name = SHADERS_ENTRY_ADDER;
-    let entry_point = shader_module
-        .entry_point(&entry_point_name)
-        .ok_or_else(|| {
-            ChimeraError::Other(format!(
-                "Entry point '{entry_point_name}' not found in SPIR-V"
-            ))
-        })?;
-    println!("`Ok(entry_point)` with: {}", entry_point_name);
-    Ok(entry_point)
-}
-
 fn build_adder_pipeline(device: Arc<Device>) -> Result<Arc<ComputePipeline>> {
-    let entry_point = adder_shader_module_entry_point(device.clone())?;
+    let shader_module = shader::shader_module(device.clone())?;
+    let entry_point = shader::shader_entry_point(shader_module, SHADERS_ENTRY_ADDER)?;
 
     // Descriptor set layout (binding 0: storage buffer)
     let mut binding0 = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
@@ -206,7 +107,7 @@ fn build_adder_pipeline(device: Arc<Device>) -> Result<Arc<ComputePipeline>> {
 impl VulkanoRunner {
     /// Create a new Vulkano runner
     pub fn new() -> Result<Self> {
-        let (device_name, device, queue) = vulkano_device_and_compute_queue()?;
+        let (device_name, device, queue) = compute_capable_device_and_queue()?;
 
         // 6. Memory allocator
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
@@ -226,34 +127,12 @@ impl VulkanoRunner {
         Ok(Self {
             device,
             queue,
-            // pipeline,
             adder_pipeline,
             memory_allocator,
             descriptor_set_allocator,
             command_buffer_allocator,
             device_name,
         })
-    }
-
-    fn build_buffer(&self, data: &[u32]) -> Result<Subbuffer<[u32]>> {
-        let usage =
-            BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
-
-        let buffer: Subbuffer<[u32]> = Buffer::from_iter(
-            self.memory_allocator.clone(),
-            BufferCreateInfo {
-                usage,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-                ..Default::default()
-            },
-            data.iter().copied(),
-        )?;
-
-        Ok(buffer)
     }
 
     /// Small helper to build a descriptor set for (a, rhs)
@@ -295,10 +174,11 @@ impl VulkanoRunner {
         let len = a.len();
         let num_workgroups = (len as u32).div_ceil(WORKGROUP_SIZE);
 
-        let buffer_a = self.build_buffer(a)?;
-        let buffer_b = self.build_buffer(b)?;
-        let buffer_c = self.build_buffer(c)?;
-        let buffer_d = self.build_buffer(d)?;
+        let alloc = self.memory_allocator.clone();
+        let buffer_a = build_and_fill_buffer(alloc.clone(), a)?;
+        let buffer_b = build_and_fill_buffer(alloc.clone(), b)?;
+        let buffer_c = build_and_fill_buffer(alloc.clone(), c)?;
+        let buffer_d = build_and_fill_buffer(alloc.clone(), d)?;
 
         // Create descriptor set (binding 0: storage buffer)
         let layout = self

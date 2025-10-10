@@ -31,18 +31,6 @@ pub enum ChimeraError {
     #[error("Failed to find compute queue family")]
     NoComputeQueue,
 
-    #[cfg(feature = "wgpu")]
-    #[error("wgpu error: {0}")]
-    Wgpu(#[from] wgpu::Error),
-
-    #[cfg(feature = "wgpu")]
-    #[error("wgpu request device error: {0}")]
-    WgpuRequestDevice(#[from] wgpu::RequestDeviceError),
-
-    #[cfg(feature = "ash")]
-    #[error("Vulkan error: {0}")]
-    Vulkan(String),
-
     #[cfg(feature = "vulkano")]
     #[error("vulkano error: {0}")]
     Vulkano(String),
@@ -97,13 +85,6 @@ pub enum ChimeraError {
 impl From<Box<dyn std::error::Error>> for ChimeraError {
     fn from(err: Box<dyn std::error::Error>) -> Self {
         ChimeraError::Other(err.to_string())
-    }
-}
-
-#[cfg(feature = "ash")]
-impl From<ash::vk::Result> for ChimeraError {
-    fn from(err: ash::vk::Result) -> Self {
-        ChimeraError::Vulkan(format!("Vulkan error: {err:?}"))
     }
 }
 

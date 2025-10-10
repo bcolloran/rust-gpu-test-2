@@ -2,11 +2,11 @@
 fn main() {
     // println!("cargo:rerun-if-changed=kernel/src");
     // Only build kernels when the appropriate features are enabled
-    #[cfg(any(feature = "vulkan", feature = "wgpu"))]
+    #[cfg(any(feature = "vulkan"))]
     build_spirv_kernel();
 }
 
-#[cfg(any(feature = "vulkan", feature = "wgpu"))]
+#[cfg(any(feature = "vulkan"))]
 fn build_spirv_kernel() {
     use spirv_builder::SpirvBuilder;
     use std::path::PathBuf;

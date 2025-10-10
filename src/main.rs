@@ -1,7 +1,10 @@
 //! Simple demo showing the same compute kernel running on CPU, CUDA, and Vulkan
 
 use anyhow::Result;
-use rust_gpu_chimera_demo::*;
+use rust_gpu_chimera_demo::{
+    runners::vulkano::shader_buffer_mapping::{GlobalBufNameToBinding, ShaderBufferMapping},
+    *,
+};
 use shared::{SortOrder, SortableKey};
 
 fn print_header() {
@@ -104,6 +107,15 @@ fn main() -> Result<()> {
     // println!("{}", sparkler_test::add(1, 3));
 
     print_header();
+
+    let global_buf_to_binding =
+        GlobalBufNameToBinding::from_list(vec![("a", 0), ("b", 1), ("x", 2), ("v", 3)]);
+
+    let shader_buffers = ShaderBufferMapping::from_lists(vec![
+        ("adder", vec![("a", 0), ("b", 1)]),
+        ("step_particles", vec![("x", 2), ("v", 3)]),
+        ("wrap_particles", vec![("x", 2)]),
+    ]);
 
     // print_test_header("Demo 1: Sorting 1000 u32 elements");
     // let mut u32_data = vec![0u32; 1000];

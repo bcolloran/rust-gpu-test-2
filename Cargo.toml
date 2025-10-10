@@ -26,20 +26,24 @@ smallvec = "1.15.1"
 facet = "0.29.1"
 
 # Vulkan dependencies (wgpu)
-wgpu = { version = "26.0", features = [
-  "spirv",
-  "vulkan-portability",
-], optional = true }
+# wgpu = { version = "26.0", features = [
+#   "spirv",
+#   "vulkan-portability",
+# ], optional = true }
 pollster = { version = "0.3", optional = true }
 futures = { version = "0.3", optional = true }
 
 # Vulkan dependencies (ash)
-ash = { version = "0.38", optional = true }
-ash-window = { version = "0.12", optional = true }
-raw-window-handle = { version = "0.6", optional = true }
+# ash = { version = "0.38", optional = true }
+# ash-window = { version = "0.12", optional = true }
+# raw-window-handle = { version = "0.6", optional = true }
 
 # Vulkan dependencies (vulkano)
 vulkano = { version = "0.35.2", optional = true }
+
+
+winit = "0.30.12"
+
 
 # Error handling
 thiserror = "1.0"
