@@ -2,24 +2,9 @@
 
 use anyhow::Result;
 use rust_gpu_chimera_demo::{
-    runners::vulkano::shader_buffer_mapping::{GlobalBufNameToBinding, ShaderBufferMapping},
+    runners::vulkano::shader_buffer_mapping::{BufNameToBinding, EntryPointNameToBuffers},
     *,
 };
-use shared::{SortOrder, SortableKey};
-
-fn print_header() {
-    println!("╔═══════════════════════════════════════════════════╗");
-    println!("║     🧬 Rust GPU Chimera Demo - Bitonic Sort 🦀    ║");
-    println!("╚═══════════════════════════════════════════════════╝");
-}
-
-fn print_test_header(test_name: &str) {
-    let width = test_name.len().max(47);
-    let top_bottom = "─".repeat(width + 2);
-    println!("\n┌{top_bottom}┐");
-    println!("│ {test_name:<width$} │");
-    println!("└{top_bottom}┘");
-}
 
 fn log_backend_info(
     host: &str,
@@ -71,15 +56,22 @@ where
     Ok(())
 }
 
-fn run_test_on_backend<T>(data: &mut [T], test_type: &str, order: SortOrder) -> Result<()>
+fn run_test_on_backend<T>(
+    data: &mut [T],
+    global_buf_to_binding: BufNameToBinding,
+    entry_point_names_to_buffers: EntryPointNameToBuffers,
+) -> Result<()>
 where
-    T: SortableKey + bytemuck::Pod + Send + Sync + std::fmt::Debug + PartialOrd + Clone,
+    T: bytemuck::Pod + Send + Sync + std::fmt::Debug + PartialOrd + Clone,
 {
     {
         let mut gpu_executed = false;
 
         if !gpu_executed {
-            if let Ok(runner) = VulkanoRunner::new() {
+            if let Ok(runner) = VulkanoRunner::new(
+                global_buf_to_binding.clone(),
+                entry_point_names_to_buffers.clone(),
+            ) {
                 // run_sort_test(&runner, data, test_type, order)?;
                 run_add_test(
                     &runner,
@@ -89,7 +81,9 @@ where
                     &(0..data.len() as u32).map(|x| x * x).collect::<Vec<u32>>(),
                 )?;
                 gpu_executed = true;
-            } else if let Err(e) = VulkanoRunner::new() {
+            } else if let Err(e) =
+                VulkanoRunner::new(global_buf_to_binding, entry_point_names_to_buffers)
+            {
                 eprintln!("  Vulkano initialization failed: {e}");
             }
         }
@@ -104,130 +98,22 @@ where
 }
 
 fn main() -> Result<()> {
-    // println!("{}", sparkler_test::add(1, 3));
-
-    print_header();
-
     let global_buf_to_binding =
-        GlobalBufNameToBinding::from_list(vec![("a", 0), ("b", 1), ("x", 2), ("v", 3)]);
+        BufNameToBinding::from_list(vec![("a", 0), ("b", 1), ("x", 2), ("v", 3)]);
 
-    let shader_buffers = ShaderBufferMapping::from_lists(vec![
+    let shader_buffers = EntryPointNameToBuffers::from_lists(vec![
         ("adder", vec![("a", 0), ("b", 1)]),
         ("step_particles", vec![("x", 2), ("v", 3)]),
         ("wrap_particles", vec![("x", 2)]),
     ]);
 
-    // print_test_header("Demo 1: Sorting 1000 u32 elements");
-    // let mut u32_data = vec![0u32; 1000];
-    // for (i, v) in u32_data.iter_mut().enumerate() {
-    //     *v = ((i * 31337 + 42) % 1000) as u32;
-    // }
-    // run_test_on_backend(&mut u32_data, "u32", SortOrder::Ascending)?;
+    shader_buffers.validate_against_global_buf_names(&global_buf_to_binding);
 
-    // print_test_header("Demo 2: Sorting u32 with special values");
-    // let mut u32_special = vec![
-    //     42u32,
-    //     7,
-    //     999,
-    //     0,
-    //     13,
-    //     256,
-    //     128,
-    //     1,
-    //     u32::MAX,
-    //     u32::MIN,
-    //     u32::MAX / 2,
-    //     u32::MAX - 1,
-    //     1000000,
-    //     999999,
-    //     100,
-    //     50,
-    // ];
-    // run_test_on_backend(&mut u32_special, "u32 special", SortOrder::Ascending)?;
-
-    // print_test_header("Demo 3: Sorting 1000 i32 elements");
-    // let mut i32_data = vec![0i32; 1000];
-    // for (i, v) in i32_data.iter_mut().enumerate() {
-    //     *v = ((i as i32 * 31337 - 500000) % 2000) - 1000;
-    // }
-    // run_test_on_backend(&mut i32_data, "i32", SortOrder::Ascending)?;
-
-    // print_test_header("Demo 4: Sorting i32 with special values");
-    // let mut i32_special = vec![
-    //     -42i32,
-    //     7,
-    //     -999,
-    //     0,
-    //     13,
-    //     -256,
-    //     128,
-    //     -1,
-    //     i32::MAX,
-    //     i32::MIN,
-    //     i32::MAX / 2,
-    //     i32::MIN / 2,
-    //     -1000000,
-    //     999999,
-    //     -100,
-    //     50,
-    // ];
-    // run_test_on_backend(&mut i32_special, "i32 special", SortOrder::Ascending)?;
-
-    print_test_header("Demo 5: Sorting 1000 f32 elements");
     let mut f32_data = vec![0.0f32; 1000];
     for (i, v) in f32_data.iter_mut().enumerate() {
         *v = ((i as f32 * std::f32::consts::PI) - 500.0) * 0.123;
     }
-    run_test_on_backend(&mut f32_data, "f32", SortOrder::Ascending)?;
-
-    // print_test_header("Demo 6: Sorting f32 with special values");
-    // let mut f32_special = vec![
-    //     std::f32::consts::PI,
-    //     -2.71,
-    //     0.0,
-    //     -0.0,
-    //     1.41,
-    //     -99.9,
-    //     42.0,
-    //     f32::INFINITY,
-    //     f32::NEG_INFINITY,
-    //     f32::MAX,
-    //     f32::MIN,
-    //     f32::MIN_POSITIVE,
-    //     -f32::MIN_POSITIVE,
-    //     1e-10,
-    //     -1e10,
-    //     0.1,
-    // ];
-    // run_test_on_backend(&mut f32_special, "f32 special", SortOrder::Ascending)?;
-
-    // print_test_header("Demo 7: Sorting u32 descending");
-    // let u32_desc = vec![42u32, 7, 999, 0, 13, 256, 128, 511, 1, 64];
-    // run_test_on_backend(&mut u32_desc.clone(), "u32", SortOrder::Descending)?;
-
-    // print_test_header("Demo 8: Sorting i32 descending with negatives");
-    // let i32_desc = vec![-42i32, 7, -999, 0, 13, -256, 128, -1, 100, -100];
-    // run_test_on_backend(&mut i32_desc.clone(), "i32", SortOrder::Descending)?;
-
-    // print_test_header("Demo 9: Sorting f32 descending with special values");
-    // let f32_desc = vec![
-    //     std::f32::consts::PI,
-    //     -2.71,
-    //     0.0,
-    //     -0.0,
-    //     1.41,
-    //     -99.9,
-    //     42.0,
-    //     f32::INFINITY,
-    //     f32::NEG_INFINITY,
-    //     f32::MAX,
-    //     f32::MIN,
-    // ];
-    // run_test_on_backend(&mut f32_desc.clone(), "f32", SortOrder::Descending)?;
-
-    // println!("\n═══════════════════════════════════════════════════");
-    // println!("All demos completed successfully! 🎉");
-    // println!("═══════════════════════════════════════════════════");
+    run_test_on_backend(&mut f32_data, global_buf_to_binding, shader_buffers)?;
 
     Ok(())
 }

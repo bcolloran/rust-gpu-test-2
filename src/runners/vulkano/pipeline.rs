@@ -1,47 +1,22 @@
 use crate::error::Result;
 use std::sync::Arc;
 
-// Vulkano imports (version 0.35 API)
-use std::collections::BTreeMap;
 use vulkano::{
-    descriptor_set::layout::{
-        DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
-        DescriptorType,
-    },
+    descriptor_set::layout::DescriptorSetLayout,
     device::Device,
     pipeline::{
         compute::{ComputePipeline, ComputePipelineCreateInfo},
         layout::{PipelineLayout, PipelineLayoutCreateInfo},
         PipelineShaderStageCreateInfo,
     },
-    shader::{EntryPoint, ShaderStages},
+    shader::EntryPoint,
 };
 
-pub fn build_adder_pipeline(
+pub fn build_pipeline(
     device: Arc<Device>,
+    descriptor_set_layout: Arc<DescriptorSetLayout>,
     entry_point: EntryPoint,
 ) -> Result<Arc<ComputePipeline>> {
-    // Descriptor set layout (binding 0: storage buffer)
-    let mut binding0 = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
-    binding0.stages = ShaderStages::COMPUTE;
-    binding0.descriptor_count = 1;
-
-    let mut binding1 = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
-    binding1.stages = ShaderStages::COMPUTE;
-    binding1.descriptor_count = 1;
-
-    let mut bindings = BTreeMap::new();
-    bindings.insert(0u32, binding0);
-    bindings.insert(1u32, binding1);
-
-    let descriptor_set_layout = DescriptorSetLayout::new(
-        device.clone(),
-        DescriptorSetLayoutCreateInfo {
-            bindings,
-            ..Default::default()
-        },
-    )?;
-
     // Pipeline layout + push constants
     let pipeline_layout = PipelineLayout::new(
         device.clone(),

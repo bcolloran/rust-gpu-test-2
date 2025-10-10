@@ -14,14 +14,20 @@ pub mod shader_buffer_mapping;
 
 use crate::{
     error::{ChimeraError, Result},
-    runners::vulkano::{buffer::build_and_fill_buffer, device::compute_capable_device_and_queue},
-    SortRunner, SHADERS_ENTRY_ADDER,
+    runners::vulkano::{
+        buffer::build_and_fill_buffer,
+        descriptor_sets::build_descriptor_set,
+        device::compute_capable_device_and_queue,
+        pipeline::build_pipeline,
+        shader_buffer_mapping::{
+            BufNameToBinding, EntryPointNameToBuffers, EntryPointNameToBuffersAndEntryPoint,
+        },
+    },
+    SortRunner,
 };
 use shared::WORKGROUP_SIZE;
 use std::sync::Arc;
 
-// Vulkano imports (version 0.35 API)
-use std::collections::BTreeMap;
 use vulkano::{
     buffer::Subbuffer,
     command_buffer::{
@@ -29,21 +35,12 @@ use vulkano::{
         PrimaryAutoCommandBuffer,
     },
     descriptor_set::{
-        allocator::StandardDescriptorSetAllocator,
-        layout::{
-            DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
-            DescriptorType,
-        },
-        DescriptorSet, WriteDescriptorSet,
+        allocator::StandardDescriptorSetAllocator, layout::DescriptorSetLayout, DescriptorSet,
+        WriteDescriptorSet,
     },
     device::{Device, Queue},
     memory::allocator::StandardMemoryAllocator,
-    pipeline::{
-        compute::{ComputePipeline, ComputePipelineCreateInfo},
-        layout::{PipelineLayout, PipelineLayoutCreateInfo},
-        Pipeline, PipelineBindPoint, PipelineShaderStageCreateInfo,
-    },
-    shader::ShaderStages,
+    pipeline::{compute::ComputePipeline, Pipeline, PipelineBindPoint},
     sync::{self, GpuFuture},
 };
 
@@ -58,56 +55,20 @@ pub struct VulkanoRunner {
     device_name: String,
 }
 
-fn build_adder_pipeline(device: Arc<Device>) -> Result<Arc<ComputePipeline>> {
-    let shader_module = shader::shader_module(device.clone())?;
-    let entry_point = shader::shader_entry_point(shader_module, SHADERS_ENTRY_ADDER)?;
-
-    // Descriptor set layout (binding 0: storage buffer)
-    let mut binding0 = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
-    binding0.stages = ShaderStages::COMPUTE;
-    binding0.descriptor_count = 1;
-
-    let mut binding1 = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
-    binding1.stages = ShaderStages::COMPUTE;
-    binding1.descriptor_count = 1;
-
-    let mut bindings = BTreeMap::new();
-    bindings.insert(0u32, binding0);
-    bindings.insert(1u32, binding1);
-
-    let descriptor_set_layout = DescriptorSetLayout::new(
-        device.clone(),
-        DescriptorSetLayoutCreateInfo {
-            bindings,
-            ..Default::default()
-        },
-    )?;
-
-    // Pipeline layout + push constants
-    let pipeline_layout = PipelineLayout::new(
-        device.clone(),
-        PipelineLayoutCreateInfo {
-            set_layouts: vec![descriptor_set_layout],
-            // push_constant_ranges: vec![PushConstantRange {
-            //     stages: ShaderStages::COMPUTE,
-            //     offset: 0,
-            //     size: std::mem::size_of::<BitonicPushConstants>() as u32,
-            // }],
-            ..Default::default()
-        },
-    )?;
-
-    // Build stage and compute pipeline
-    let stage = PipelineShaderStageCreateInfo::new(entry_point.clone());
-    let pipeline_info = ComputePipelineCreateInfo::stage_layout(stage, pipeline_layout.clone());
-    let pipeline = ComputePipeline::new(device.clone(), None, pipeline_info)?;
-    Ok(pipeline)
-}
-
 impl VulkanoRunner {
     /// Create a new Vulkano runner
-    pub fn new() -> Result<Self> {
+    pub fn new(
+        global_buf_to_binding: BufNameToBinding,
+        entry_point_names_to_buffers: EntryPointNameToBuffers,
+    ) -> Result<Self> {
         let (device_name, device, queue) = compute_capable_device_and_queue()?;
+
+        let shader_module = shader::shader_module(device.clone())?;
+
+        let shader_bufs_and_entries = EntryPointNameToBuffersAndEntryPoint::from_entry_point_names(
+            shader_module,
+            &entry_point_names_to_buffers,
+        );
 
         // 6. Memory allocator
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
@@ -122,7 +83,15 @@ impl VulkanoRunner {
             Default::default(),
         ));
 
-        let adder_pipeline = build_adder_pipeline(device.clone())?;
+        let descriptor_set_layout = build_descriptor_set(device.clone(), global_buf_to_binding)?;
+
+        let adder_entry = shader_bufs_and_entries
+            .shaders
+            .get("adder")
+            .ok_or_else(|| ChimeraError::Other("No 'adder' entry point found".into()))?
+            .1
+            .clone();
+        let adder_pipeline = build_pipeline(device.clone(), descriptor_set_layout, adder_entry)?;
 
         Ok(Self {
             device,
@@ -138,10 +107,10 @@ impl VulkanoRunner {
     /// Small helper to build a descriptor set for (a, rhs)
     fn make_adder_set(
         &self,
-        layout: std::sync::Arc<vulkano::descriptor_set::layout::DescriptorSetLayout>,
+        layout: Arc<DescriptorSetLayout>,
         a: Subbuffer<[u32]>,
         rhs: Subbuffer<[u32]>,
-    ) -> Result<std::sync::Arc<DescriptorSet>> {
+    ) -> Result<Arc<DescriptorSet>> {
         let writes = [
             WriteDescriptorSet::buffer(0, a),
             WriteDescriptorSet::buffer(1, rhs),
