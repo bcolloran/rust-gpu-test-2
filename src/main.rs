@@ -1,5 +1,7 @@
 //! Simple demo showing the same compute kernel running on CPU, CUDA, and Vulkan
 
+use std::vec;
+
 use anyhow::Result;
 use rust_gpu_chimera_demo::{
     runners::vulkano::shader_buffer_mapping::{BufNameToBinding, EntryPointNameToBuffers},
@@ -108,6 +110,18 @@ fn main() -> Result<()> {
     ]);
 
     shader_buffers.validate_against_global_buf_names(&global_buf_to_binding);
+
+    // let exec_order = vec![
+    //     "adder",
+    //     "step_particles",
+    //     "wrap_particles", // wrap after stepping
+    //     "step_particles",
+    //     "wrap_particles", // wrap after stepping
+    //     "step_particles",
+    //     "wrap_particles", // wrap after stepping
+    //     "step_particles",
+    //     "wrap_particles", // wrap after stepping
+    // ];
 
     let mut f32_data = vec![0.0f32; 1000];
     for (i, v) in f32_data.iter_mut().enumerate() {

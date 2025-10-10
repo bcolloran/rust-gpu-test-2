@@ -1,10 +1,3 @@
-//! Vulkano runner implementation - Safe Vulkan abstraction via vulkano
-//!
-//! Mirrors the behaviour of the raw ash based runner but implemented using
-//! the higher level `vulkano` crate. This keeps resource management safer
-//! (RAII) and shortens the amount of boilerplate. The public behaviour is
-//! intended to match `AshRunner` so it can be swapped transparently.
-
 pub mod buffer;
 pub mod descriptor_sets;
 pub mod device;
@@ -220,10 +213,6 @@ impl SortRunner for VulkanoRunner {
             None,
         )
     }
-
-    // fn execute_kernel_pass(&self, data: &mut [u32], params: BitonicParams) -> Result<()> {
-    //     self.run_pass(data, params)
-    // }
 
     fn execute_adder_kernel_pass(
         &self,
