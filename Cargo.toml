@@ -16,7 +16,8 @@ vulkano = ["vulkan", "dep:vulkano"]
 [dependencies]
 # Shared dependencies
 shared = { path = "shared" }
-glam = "0.24"
+
+glam = { version = "0.24", features = ["bytemuck"] }
 bytemuck = { version = "1.14" }
 num_cpus = "1.16"
 parking_lot = "0.12"

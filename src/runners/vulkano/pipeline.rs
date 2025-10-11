@@ -12,6 +12,8 @@ use vulkano::{
     shader::EntryPoint,
 };
 
+/// Build a compute pipeline for the given entry point and descriptor set layout
+/// A "pipeline" is for only one shader (not a sequence of shaders)
 pub fn build_pipeline(
     device: Arc<Device>,
     descriptor_set_layout: Arc<DescriptorSetLayout>,

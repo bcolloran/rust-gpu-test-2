@@ -1,6 +1,7 @@
 pub mod buffer;
 pub mod descriptor_sets;
 pub mod device;
+pub mod dispatch;
 pub mod pipeline;
 pub mod shader;
 pub mod shader_buffer_mapping;
@@ -9,8 +10,9 @@ use crate::{
     error::{ChimeraError, Result},
     runners::vulkano::{
         buffer::build_and_fill_buffer,
-        descriptor_sets::build_descriptor_set,
+        descriptor_sets::build_abstract_descriptor_set_layout,
         device::compute_capable_device_and_queue,
+        dispatch::bind_and_dispatch,
         pipeline::build_pipeline,
         shader_buffer_mapping::{
             BufNameToBinding, EntryPointNameToBuffers, EntryPointNameToBuffersAndEntryPoint,
@@ -18,14 +20,14 @@ use crate::{
     },
     SortRunner,
 };
+use glam::Vec2;
 use shared::WORKGROUP_SIZE;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use vulkano::{
     buffer::Subbuffer,
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
-        PrimaryAutoCommandBuffer,
     },
     descriptor_set::{
         allocator::StandardDescriptorSetAllocator, layout::DescriptorSetLayout, DescriptorSet,
@@ -33,7 +35,7 @@ use vulkano::{
     },
     device::{Device, Queue},
     memory::allocator::StandardMemoryAllocator,
-    pipeline::{compute::ComputePipeline, Pipeline, PipelineBindPoint},
+    pipeline::compute::ComputePipeline,
     sync::{self, GpuFuture},
 };
 
@@ -41,10 +43,12 @@ use vulkano::{
 pub struct VulkanoRunner {
     device: Arc<Device>,
     queue: Arc<Queue>,
-    adder_pipeline: Arc<ComputePipeline>,
+    compute_pipelines: HashMap<String, Arc<ComputePipeline>>,
     memory_allocator: Arc<StandardMemoryAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+    // descriptor set layout shared by all pipelines
+    shared_descriptor_set_layout: Arc<DescriptorSetLayout>,
     device_name: String,
 }
 
@@ -76,23 +80,36 @@ impl VulkanoRunner {
             Default::default(),
         ));
 
-        let descriptor_set_layout = build_descriptor_set(device.clone(), global_buf_to_binding)?;
+        let descriptor_set_layout =
+            build_abstract_descriptor_set_layout(device.clone(), global_buf_to_binding)?;
 
-        let adder_entry = shader_bufs_and_entries
+        let compute_pipelines: HashMap<String, Arc<ComputePipeline>> = entry_point_names_to_buffers
             .shaders
-            .get("adder")
-            .ok_or_else(|| ChimeraError::Other("No 'adder' entry point found".into()))?
-            .1
-            .clone();
-        let adder_pipeline = build_pipeline(device.clone(), descriptor_set_layout, adder_entry)?;
+            .iter()
+            .filter_map(|(name, _)| {
+                let entry = shader_bufs_and_entries
+                    .shaders
+                    .get(name)
+                    .ok_or_else(|| {
+                        ChimeraError::Other(format!("No entry point found for '{name}'"))
+                    })
+                    .ok()?
+                    .1
+                    .clone();
+                let pipeline =
+                    build_pipeline(device.clone(), descriptor_set_layout.clone(), entry).ok()?;
+                Some((name.clone(), pipeline))
+            })
+            .collect::<_>();
 
         Ok(Self {
             device,
             queue,
-            adder_pipeline,
+            compute_pipelines,
             memory_allocator,
             descriptor_set_allocator,
             command_buffer_allocator,
+            shared_descriptor_set_layout: descriptor_set_layout,
             device_name,
         })
     }
@@ -112,25 +129,15 @@ impl VulkanoRunner {
         Ok(set)
     }
 
-    fn bind_descriptor_sets_and_dispatch(
+    fn run_adder_pass(
         &self,
-        builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-        set: Arc<DescriptorSet>,
-        num_wg: u32,
+        a: &mut [u32],
+        b: &[u32],
+        c: &[u32],
+        d: &[u32],
+        x: &[Vec2],
+        v: &[Vec2],
     ) -> Result<()> {
-        builder.bind_descriptor_sets(
-            PipelineBindPoint::Compute,
-            self.adder_pipeline.layout().clone(),
-            0,
-            set,
-        )?;
-        unsafe {
-            builder.dispatch([num_wg, 1, 1])?;
-        }
-        Ok(())
-    }
-
-    fn run_adder_pass(&self, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()> {
         assert_eq!(a.len(), b.len());
         // Allocate a CPU visible buffer, copy input, run compute, read back
         let len = a.len();
@@ -141,17 +148,11 @@ impl VulkanoRunner {
         let buffer_b = build_and_fill_buffer(alloc.clone(), b)?;
         let buffer_c = build_and_fill_buffer(alloc.clone(), c)?;
         let buffer_d = build_and_fill_buffer(alloc.clone(), d)?;
+        let buffer_x = build_and_fill_buffer(alloc.clone(), x)?;
+        let buffer_v = build_and_fill_buffer(alloc.clone(), v)?;
 
         // Create descriptor set (binding 0: storage buffer)
-        let layout = self
-            .adder_pipeline
-            .layout()
-            .set_layouts()
-            .get(0)
-            .cloned()
-            .ok_or_else(|| {
-                ChimeraError::Other("Pipeline missing descriptor set layout 0".into())
-            })?;
+        let layout = self.shared_descriptor_set_layout.clone();
 
         let set_ab = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_b.clone())?;
         let set_ac = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_c.clone())?;
@@ -164,12 +165,28 @@ impl VulkanoRunner {
             CommandBufferUsage::OneTimeSubmit,
         )?;
 
-        println!("`Ok(builder)`");
-        builder.bind_pipeline_compute(self.adder_pipeline.clone())?;
+        builder.bind_pipeline_compute(self.compute_pipelines["adder"].clone())?;
 
-        self.bind_descriptor_sets_and_dispatch(&mut builder, set_ab, num_workgroups)?;
-        self.bind_descriptor_sets_and_dispatch(&mut builder, set_ac, num_workgroups)?;
-        self.bind_descriptor_sets_and_dispatch(&mut builder, set_ad, num_workgroups)?;
+        bind_and_dispatch(
+            &mut builder,
+            self.compute_pipelines["adder"].clone(),
+            set_ab,
+            num_workgroups,
+        )?;
+
+        bind_and_dispatch(
+            &mut builder,
+            self.compute_pipelines["adder"].clone(),
+            set_ac,
+            num_workgroups,
+        )?;
+
+        bind_and_dispatch(
+            &mut builder,
+            self.compute_pipelines["adder"].clone(),
+            set_ad,
+            num_workgroups,
+        )?;
 
         let command_buffer = builder.build()?;
 
@@ -220,8 +237,10 @@ impl SortRunner for VulkanoRunner {
         b: &[u32],
         c: &[u32],
         d: &[u32],
+        x: &mut [Vec2],
+        v: &[Vec2],
     ) -> Result<()> {
-        self.run_adder_pass(a, b, c, d)
+        self.run_adder_pass(a, b, c, d, x, v)
     }
 }
 

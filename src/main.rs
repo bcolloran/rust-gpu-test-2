@@ -3,6 +3,7 @@
 use std::vec;
 
 use anyhow::Result;
+use glam::Vec2;
 use rust_gpu_chimera_demo::{
     runners::vulkano::shader_buffer_mapping::{BufNameToBinding, EntryPointNameToBuffers},
     *,
@@ -31,7 +32,15 @@ fn log_backend_info(
     }
 }
 
-fn run_add_test<R>(runner: &R, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()>
+fn run_add_test<R>(
+    runner: &R,
+    a: &mut [u32],
+    b: &[u32],
+    c: &[u32],
+    d: &[u32],
+    x: &mut [Vec2],
+    v: &[Vec2],
+) -> Result<()>
 where
     R: SortRunner,
 {
@@ -42,13 +51,16 @@ where
     let len = a.len();
     let original_first_10_a = a[..10.min(len)].to_vec();
     let original_first_10_b = b[..10.min(len)].to_vec();
-
-    runner.add(a, b, c, d)?;
-    println!("  ➕ Addition operation completed successfully.");
-
     // Display results
     println!("\n  Original `a` (first 10 ): {original_first_10_a:?}");
     println!("  Original `b` (first 10 ): {original_first_10_b:?}");
+
+    println!("\n  Original `x` (first 10 ): {:?}", &x[..10.min(len)]);
+
+    runner.run_adder_pass(a, b, c, d, x, v)?;
+    println!("  ➕ Addition operation completed successfully.");
+
+    println!("\n  Post `x` (first 10 ): {:?}", &x[..10.min(len)]);
 
     println!(
         "  Result in `a` after adds (first 10): {:?}",
@@ -69,6 +81,14 @@ where
     {
         let mut gpu_executed = false;
 
+        let mut x = (0..data.len() as u32)
+            .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
+            .collect::<Vec<Vec2>>();
+
+        let v = (0..data.len() as u32)
+            .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
+            .collect::<Vec<Vec2>>();
+
         if !gpu_executed {
             if let Ok(runner) = VulkanoRunner::new(
                 global_buf_to_binding.clone(),
@@ -79,8 +99,10 @@ where
                     &runner,
                     &mut vec![1u32; data.len()],
                     &(0..data.len() as u32).collect::<Vec<u32>>(),
-                    &vec![3u32; data.len()],
+                    &vec![30u32; data.len()],
                     &(0..data.len() as u32).map(|x| x * x).collect::<Vec<u32>>(),
+                    &mut x,
+                    &v,
                 )?;
                 gpu_executed = true;
             } else if let Err(e) =

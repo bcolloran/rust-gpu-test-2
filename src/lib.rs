@@ -10,6 +10,7 @@ pub mod error;
 pub mod runners;
 
 use error::Result;
+use glam::Vec2;
 use shared::{SortOrder, SortableKey};
 
 /// Common trait for all sorting backends
@@ -39,6 +40,8 @@ pub trait SortRunner {
         b: &[u32],
         c: &[u32],
         d: &[u32],
+        x: &mut [Vec2],
+        v: &[Vec2],
     ) -> Result<()>;
 
     /// Prepare data by converting to `u32` representation
@@ -59,9 +62,19 @@ pub trait SortRunner {
         }
     }
 
-    fn run_adder_pass(&self, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()> {
+    fn run_adder_pass(
+        &self,
+        a: &mut [u32],
+        b: &[u32],
+        c: &[u32],
+        d: &[u32],
+        x: &mut [Vec2],
+        v: &[Vec2],
+    ) -> Result<()> {
         assert_eq!(a.len(), b.len());
-        self.execute_adder_kernel_pass(a, b, c, d)
+        assert_eq!(x.len(), v.len());
+
+        self.execute_adder_kernel_pass(a, b, c, d, x, v)
     }
 
     /// Convert sorted `u32` data back to original type
@@ -69,11 +82,6 @@ pub trait SortRunner {
         for (i, &val) in gpu_data.iter().take(output.len()).enumerate() {
             output[i] = T::from_sortable_u32(val);
         }
-    }
-
-    fn add(&self, a: &mut [u32], b: &[u32], c: &[u32], d: &[u32]) -> Result<()> {
-        assert_eq!(a.len(), b.len());
-        self.run_adder_pass(a, b, c, d)
     }
 }
 

@@ -3,15 +3,18 @@ use std::sync::Arc;
 
 use std::collections::BTreeMap;
 use vulkano::{
-    descriptor_set::layout::{
-        DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
-        DescriptorType,
+    descriptor_set::{
+        layout::{
+            DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
+            DescriptorType,
+        },
+        WriteDescriptorSet,
     },
     device::Device,
     shader::ShaderStages,
 };
 
-pub fn build_descriptor_set(
+pub fn build_abstract_descriptor_set_layout(
     device: Arc<Device>,
     global_buf_to_binding: BufNameToBinding,
 ) -> Result<Arc<DescriptorSetLayout>> {
@@ -36,3 +39,14 @@ pub fn build_descriptor_set(
 
     Ok(layout)
 }
+
+// pub fn build_concrete_descriptor_set(
+//     layout: Arc<DescriptorSetLayout>,
+// ) -> Result<Arc<DescriptorSetLayout>> {
+//     let writes = [
+//         WriteDescriptorSet::buffer(0, a),
+//         WriteDescriptorSet::buffer(1, rhs),
+//     ];
+//     let set = DescriptorSet::new(self.descriptor_set_allocator.clone(), layout, writes, [])?;
+//     Ok(set)
+// }
