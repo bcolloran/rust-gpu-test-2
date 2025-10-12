@@ -31,11 +31,14 @@ pub fn build_pipeline(
             // }],
             ..Default::default()
         },
-    )?;
+    )
+    .inspect_err(|e| println!("error in PipelineLayout::new: {e}"))?;
 
     // Build stage and compute pipeline
     let stage = PipelineShaderStageCreateInfo::new(entry_point.clone());
     let pipeline_info = ComputePipelineCreateInfo::stage_layout(stage, pipeline_layout.clone());
-    let pipeline = ComputePipeline::new(device.clone(), None, pipeline_info)?;
+
+    let pipeline = ComputePipeline::new(device.clone(), None, pipeline_info)
+        .inspect_err(|e| println!("error in ComputePipeline::new: {e}"))?;
     Ok(pipeline)
 }

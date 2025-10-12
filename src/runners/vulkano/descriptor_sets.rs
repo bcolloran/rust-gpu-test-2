@@ -1,52 +1,65 @@
-use crate::{error::Result, runners::vulkano::shader_buffer_mapping::BufNameToBinding};
-use std::sync::Arc;
+use crate::runners::vulkano::buffer::BufNameToBinding;
+use crate::{error::Result, runners::vulkano::shader_buffer_mapping::ShaderPipelineInfosWithEntry};
+use std::{collections::HashMap, sync::Arc};
 
 use std::collections::BTreeMap;
 use vulkano::{
     descriptor_set::{
+        allocator::StandardDescriptorSetAllocator,
         layout::{
             DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
             DescriptorType,
         },
-        WriteDescriptorSet,
+        DescriptorSet, WriteDescriptorSet,
     },
     device::Device,
     shader::ShaderStages,
 };
 
-pub fn build_abstract_descriptor_set_layout(
-    device: Arc<Device>,
-    global_buf_to_binding: BufNameToBinding,
-) -> Result<Arc<DescriptorSetLayout>> {
-    let mut bindings = BTreeMap::new();
+/// Build the DescriptorSetLayout needed for the given set of (shaders, input buf requirements)
+// pub fn build_abstract_descriptor_set_layouts(
+//     device: Arc<Device>,
+//     shader_bufs_and_entries: ShaderPipelineInfosWithEntry,
+//     global_buf_to_binding: BufNameToBinding,
+// ) -> Result<HashMap<String, Arc<DescriptorSetLayout>>> {
+//     let mut layouts = HashMap::new();
 
-    for (_buf_name, binding) in global_buf_to_binding.0.iter() {
-        let mut binding_desc =
-            DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
-        binding_desc.stages = ShaderStages::COMPUTE;
-        binding_desc.descriptor_count = 1;
+//     for pipeline_info in shader_bufs_and_entries.pipelines.iter() {
+//         let mut bindings = BTreeMap::new();
 
-        bindings.insert(*binding, binding_desc);
-    }
+//         for buf_name in pipeline_info.buf_names.clone() {
+//             let mut binding_desc =
+//                 DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
+//             binding_desc.stages = ShaderStages::COMPUTE;
+//             binding_desc.descriptor_count = 1;
 
-    let layout = DescriptorSetLayout::new(
-        device.clone(),
-        DescriptorSetLayoutCreateInfo {
-            bindings,
-            ..Default::default()
-        },
-    )?;
+//             let binding = global_buf_to_binding[&buf_name];
 
-    Ok(layout)
-}
+//             bindings.insert(binding, binding_desc);
+//         }
 
-// pub fn build_concrete_descriptor_set(
-//     layout: Arc<DescriptorSetLayout>,
-// ) -> Result<Arc<DescriptorSetLayout>> {
-//     let writes = [
-//         WriteDescriptorSet::buffer(0, a),
-//         WriteDescriptorSet::buffer(1, rhs),
-//     ];
-//     let set = DescriptorSet::new(self.descriptor_set_allocator.clone(), layout, writes, [])?;
-//     Ok(set)
+//         let layout = DescriptorSetLayout::new(
+//             device.clone(),
+//             DescriptorSetLayoutCreateInfo {
+//                 bindings,
+//                 ..Default::default()
+//             },
+//         )?;
+//         layouts.insert(pipeline_info.entry_point_name.clone(), layout);
+//     }
+//     Ok(layouts)
 // }
+
+pub fn build_concrete_descriptor_set(
+    descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
+    layout: Arc<DescriptorSetLayout>,
+    write_descriptor_sets: Vec<WriteDescriptorSet>,
+) -> Result<Arc<DescriptorSet>> {
+    let set = DescriptorSet::new(
+        descriptor_set_allocator.clone(),
+        layout,
+        write_descriptor_sets,
+        [],
+    )?;
+    Ok(set)
+}

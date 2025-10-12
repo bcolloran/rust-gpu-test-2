@@ -7,18 +7,18 @@ pub mod shader;
 pub mod shader_buffer_mapping;
 
 use crate::{
-    error::{ChimeraError, Result},
+    error::Result,
     runners::vulkano::{
-        buffer::build_and_fill_buffer,
-        descriptor_sets::build_abstract_descriptor_set_layout,
+        buffer::{
+            build_and_fill_buffer, build_and_fill_buffer_and_get_write_descriptor_set,
+            BufNameToBinding, BufNameToBufferAny, BufferAny,
+        },
         device::compute_capable_device_and_queue,
-        dispatch::bind_and_dispatch,
-        pipeline::build_pipeline,
         shader_buffer_mapping::{
-            BufNameToBinding, EntryPointNameToBuffers, EntryPointNameToBuffersAndEntryPoint,
+            ComputePassInvocationInfo, ShaderPipelineInfosWithComputePipelines,
         },
     },
-    SortRunner,
+    // SortRunner,
 };
 use glam::Vec2;
 use shared::WORKGROUP_SIZE;
@@ -35,7 +35,6 @@ use vulkano::{
     },
     device::{Device, Queue},
     memory::allocator::StandardMemoryAllocator,
-    pipeline::compute::ComputePipeline,
     sync::{self, GpuFuture},
 };
 
@@ -43,31 +42,28 @@ use vulkano::{
 pub struct VulkanoRunner {
     device: Arc<Device>,
     queue: Arc<Queue>,
-    compute_pipelines: HashMap<String, Arc<ComputePipeline>>,
+    compute_pipelines: ShaderPipelineInfosWithComputePipelines,
     memory_allocator: Arc<StandardMemoryAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     // descriptor set layout shared by all pipelines
-    shared_descriptor_set_layout: Arc<DescriptorSetLayout>,
+    // descriptor_set_layouts: HashMap<String, Arc<DescriptorSetLayout>>,
     device_name: String,
 }
 
 impl VulkanoRunner {
     /// Create a new Vulkano runner
     pub fn new(
-        global_buf_to_binding: BufNameToBinding,
-        entry_point_names_to_buffers: EntryPointNameToBuffers,
+        // global_buf_to_binding: BufNameToBinding,
+        entry_point_names_to_buffers: ComputePassInvocationInfo,
     ) -> Result<Self> {
         let (device_name, device, queue) = compute_capable_device_and_queue()?;
+        println!("Using device: {}", device_name);
 
         let shader_module = shader::shader_module(device.clone())?;
+        println!("Shader module created");
 
-        let shader_bufs_and_entries = EntryPointNameToBuffersAndEntryPoint::from_entry_point_names(
-            shader_module,
-            &entry_point_names_to_buffers,
-        );
-
-        // 6. Memory allocator
+        //   allocators
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
 
         let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
@@ -80,28 +76,26 @@ impl VulkanoRunner {
             Default::default(),
         ));
 
-        let descriptor_set_layout =
-            build_abstract_descriptor_set_layout(device.clone(), global_buf_to_binding)?;
+        println!("Allocators created");
 
-        let compute_pipelines: HashMap<String, Arc<ComputePipeline>> = entry_point_names_to_buffers
-            .shaders
-            .iter()
-            .filter_map(|(name, _)| {
-                let entry = shader_bufs_and_entries
-                    .shaders
-                    .get(name)
-                    .ok_or_else(|| {
-                        ChimeraError::Other(format!("No entry point found for '{name}'"))
-                    })
-                    .ok()?
-                    .1
-                    .clone();
-                let pipeline =
-                    build_pipeline(device.clone(), descriptor_set_layout.clone(), entry).ok()?;
-                Some((name.clone(), pipeline))
-            })
-            .collect::<_>();
+        let shader_bufs_and_entries =
+            entry_point_names_to_buffers.with_entry_points(shader_module.clone());
 
+        println!("Shader entry points created");
+
+        let descriptor_set_layouts =
+            shader_bufs_and_entries.with_descriptor_sets(device.clone())?;
+        println!("Descriptor set layouts created");
+
+        // build_abstract_descriptor_set_layouts(
+        //     device.clone(),
+        //     shader_bufs_and_entries.clone(),
+        //     global_buf_to_binding,
+        // )?;
+
+        let compute_pipelines = descriptor_set_layouts.with_pipelines(device.clone())?;
+
+        println!("VulkanoRunner::new ok");
         Ok(Self {
             device,
             queue,
@@ -109,33 +103,34 @@ impl VulkanoRunner {
             memory_allocator,
             descriptor_set_allocator,
             command_buffer_allocator,
-            shared_descriptor_set_layout: descriptor_set_layout,
+            // descriptor_set_layouts,
             device_name,
         })
     }
 
     /// Small helper to build a descriptor set for (a, rhs)
-    fn make_adder_set(
-        &self,
-        layout: Arc<DescriptorSetLayout>,
-        a: Subbuffer<[u32]>,
-        rhs: Subbuffer<[u32]>,
-    ) -> Result<Arc<DescriptorSet>> {
-        let writes = [
-            WriteDescriptorSet::buffer(0, a),
-            WriteDescriptorSet::buffer(1, rhs),
-        ];
-        let set = DescriptorSet::new(self.descriptor_set_allocator.clone(), layout, writes, [])?;
-        Ok(set)
-    }
+    // fn make_adder_set(
+    //     &self,
+    //     layout: Arc<DescriptorSetLayout>,
+    //     a: Subbuffer<[u32]>,
+    //     rhs: Subbuffer<[u32]>,
+    // ) -> Result<Arc<DescriptorSet>> {
+    //     let writes = [
+    //         WriteDescriptorSet::buffer(0, a),
+    //         WriteDescriptorSet::buffer(1, rhs),
+    //     ];
+    //     let set = DescriptorSet::new(self.descriptor_set_allocator.clone(), layout, writes, [])?;
+    //     Ok(set)
+    // }
 
-    fn run_adder_pass(
+    pub fn execute_adder_kernel_pass(
         &self,
+        // global_buf_to_binding: BufNameToBinding,
         a: &mut [u32],
         b: &[u32],
         c: &[u32],
         d: &[u32],
-        x: &[Vec2],
+        x: &mut [Vec2],
         v: &[Vec2],
     ) -> Result<()> {
         assert_eq!(a.len(), b.len());
@@ -151,12 +146,105 @@ impl VulkanoRunner {
         let buffer_x = build_and_fill_buffer(alloc.clone(), x)?;
         let buffer_v = build_and_fill_buffer(alloc.clone(), v)?;
 
-        // Create descriptor set (binding 0: storage buffer)
-        let layout = self.shared_descriptor_set_layout.clone();
+        let buffers = BufNameToBufferAny(HashMap::from([
+            ("a".to_string(), buffer_a.into()),
+            ("b".to_string(), buffer_b.into()),
+            ("c".to_string(), buffer_c.into()),
+            ("d".to_string(), buffer_d.into()),
+            ("x".to_string(), buffer_x.into()),
+            ("v".to_string(), buffer_v.into()),
+        ]));
 
-        let set_ab = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_b.clone())?;
-        let set_ac = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_c.clone())?;
-        let set_ad = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_d.clone())?;
+        // let (buffer_a, write_desc_a) = build_and_fill_buffer_and_get_write_descriptor_set(
+        //     alloc.clone(),
+        //     a,
+        //     global_buf_to_binding["a"],
+        // )?;
+        // let (buffer_b, write_desc_b) = build_and_fill_buffer_and_get_write_descriptor_set(
+        //     alloc.clone(),
+        //     b,
+        //     global_buf_to_binding["b"],
+        // )?;
+        // let (buffer_c, write_desc_c) = build_and_fill_buffer_and_get_write_descriptor_set(
+        //     alloc.clone(),
+        //     c,
+        //     global_buf_to_binding["c"],
+        // )?;
+        // let (buffer_d, write_desc_d) = build_and_fill_buffer_and_get_write_descriptor_set(
+        //     alloc.clone(),
+        //     d,
+        //     global_buf_to_binding["d"],
+        // )?;
+        // let (buffer_x, write_desc_x) = build_and_fill_buffer_and_get_write_descriptor_set(
+        //     alloc.clone(),
+        //     x,
+        //     global_buf_to_binding["x"],
+        // )?;
+        // let (buffer_v, write_desc_v) = build_and_fill_buffer_and_get_write_descriptor_set(
+        //     alloc.clone(),
+        //     v,
+        //     global_buf_to_binding["v"],
+        // )?;
+
+        // Create descriptor set (binding 0: storage buffer)
+        // let layout = self.shared_descriptor_set_layout.clone();
+
+        // let set_ab = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_b.clone())?;
+        // let set_ac = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_c.clone())?;
+        // let set_ad = self.make_adder_set(layout.clone(), buffer_a.clone(), buffer_d.clone())?;
+
+        let compute_pipelines_with_desc_sets = self
+            .compute_pipelines
+            .with_descriptor_sets(self.descriptor_set_allocator.clone(), &buffers)?;
+        //     .with_descriptor_sets(
+        //         self.descriptor_set_allocator.clone(),
+        //         &HashMap::from([
+        //             (
+        //                 "adder_ab".to_string(),
+        //                 vec![write_desc_a.clone(), write_desc_b.clone()],
+        //             ),
+        //             (
+        //                 "adder_ac".to_string(),
+        //                 vec![write_desc_a.clone(), write_desc_c.clone()],
+        //             ),
+        //             (
+        //                 "adder_ad".to_string(),
+        //                 vec![write_desc_a.clone(), write_desc_d.clone()],
+        //             ),
+        //             (
+        //                 "step_particles".to_string(),
+        //                 vec![write_desc_x.clone(), write_desc_v.clone()],
+        //             ),
+        //             ("wrap_particles".to_string(), vec![write_desc_x.clone()]),
+        //         ]),
+        //     )
+        //     .inspect_err(|e| {
+        //         println!("Error during compute_pipelines.with_descriptor_sets: {e}")
+        //     })?;
+
+        // let set_ab = build_concrete_descriptor_set(
+        //     self.descriptor_set_allocator.clone(),
+        //     // layout.clone(),
+        //     self.compute_pipelines.pipelines["adder_ab"]
+        //         .descriptor_set_layout
+        //         .clone(),
+        //     vec![write_desc_a.clone(), write_desc_b.clone()],
+        // )?;
+        // let set_ac = build_concrete_descriptor_set(
+        //     self.descriptor_set_allocator.clone(),
+        //     // layout.clone(),
+        //     self.compute_pipelines.pipelines["adder_ac"]
+        //         .descriptor_set_layout
+        //         .clone(),
+        //     vec![write_desc_a.clone(), write_desc_c.clone()],
+        // )?;
+        // let set_ad = build_concrete_descriptor_set(
+        //     self.descriptor_set_allocator.clone(),
+        //     self.compute_pipelines.pipelines["adder_ad"]
+        //         .descriptor_set_layout
+        //         .clone(),
+        //     vec![write_desc_a.clone(), write_desc_d.clone()],
+        // )?;
 
         // Build command buffer
         let mut builder = AutoCommandBufferBuilder::primary(
@@ -164,29 +252,32 @@ impl VulkanoRunner {
             self.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )?;
+        compute_pipelines_with_desc_sets
+            .bind_and_dispatch_all(&mut builder, num_workgroups)
+            .inspect_err(|e| println!("Error during bind_and_dispatch_all: {e}"))?;
+        print!("  Dispatching compute on device '{}'", self.device_name);
+        // builder.bind_pipeline_compute(self.compute_pipelines["adder"].clone())?;
 
-        builder.bind_pipeline_compute(self.compute_pipelines["adder"].clone())?;
+        // bind_and_dispatch(
+        //     &mut builder,
+        //     self.compute_pipelines["adder_ab"].clone(),
+        //     set_ab,
+        //     num_workgroups,
+        // )?;
 
-        bind_and_dispatch(
-            &mut builder,
-            self.compute_pipelines["adder"].clone(),
-            set_ab,
-            num_workgroups,
-        )?;
+        // bind_and_dispatch(
+        //     &mut builder,
+        //     self.compute_pipelines["adder_ac"].clone(),
+        //     set_ac,
+        //     num_workgroups,
+        // )?;
 
-        bind_and_dispatch(
-            &mut builder,
-            self.compute_pipelines["adder"].clone(),
-            set_ac,
-            num_workgroups,
-        )?;
-
-        bind_and_dispatch(
-            &mut builder,
-            self.compute_pipelines["adder"].clone(),
-            set_ad,
-            num_workgroups,
-        )?;
+        // bind_and_dispatch(
+        //     &mut builder,
+        //     self.compute_pipelines["adder_ad"].clone(),
+        //     set_ad,
+        //     num_workgroups,
+        // )?;
 
         let command_buffer = builder.build()?;
 
@@ -197,50 +288,13 @@ impl VulkanoRunner {
         future.wait(None)?;
 
         // Read back results (buffer is host visible)
-        let content = buffer_a.read()?;
-        a.copy_from_slice(&content[..len]);
+        let content = &buffers.0["a"].read_u32()[..len];
+        // let buffer_a: Subbuffer<[u32]> = buffers.0.remove["a"].try_into().unwrap();
+        // let content = buffer_a.read()?;
+        a.copy_from_slice(&content);
+        x.copy_from_slice(&buffers.0["x"].read_vec2()[..len]);
 
         Ok(())
-    }
-}
-
-//
-//
-//
-//
-//
-//
-//
-//
-//
-
-impl SortRunner for VulkanoRunner {
-    fn backend_info(
-        &self,
-    ) -> (
-        &'static str,
-        Option<&'static str>,
-        Option<String>,
-        Option<String>,
-    ) {
-        (
-            "vulkano",
-            Some("Vulkan"),
-            Some(self.device_name.clone()),
-            None,
-        )
-    }
-
-    fn execute_adder_kernel_pass(
-        &self,
-        a: &mut [u32],
-        b: &[u32],
-        c: &[u32],
-        d: &[u32],
-        x: &mut [Vec2],
-        v: &[Vec2],
-    ) -> Result<()> {
-        self.run_adder_pass(a, b, c, d, x, v)
     }
 }
 
