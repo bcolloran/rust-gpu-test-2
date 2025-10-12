@@ -27,12 +27,14 @@ use vulkano::{
     },
     descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{Device, Queue},
+    instance::Instance,
     memory::allocator::StandardMemoryAllocator,
     sync::{self, GpuFuture},
 };
 
 /// Vulkan-based runner for bitonic sort using vulkano safe abstractions
 pub struct VulkanoRunner {
+    instance: Arc<Instance>,
     device: Arc<Device>,
     queue: Arc<Queue>,
     compute_pipelines: ShaderPipelineInfosWithComputePipelines,
@@ -46,7 +48,7 @@ pub struct VulkanoRunner {
 impl VulkanoRunner {
     /// Create a new Vulkano runner
     pub fn new(entry_point_names_to_buffers: ComputePassInvocationInfo) -> CrateResult<Self> {
-        let (device_name, device, queue) = compute_capable_device_and_queue()?;
+        let (instance, device_name, device, queue) = compute_capable_device_and_queue()?;
         println!("Using device: {}", device_name);
 
         let shader_module = shader::shader_module(device.clone())?;
@@ -80,6 +82,7 @@ impl VulkanoRunner {
 
         println!("VulkanoRunner::new ok");
         Ok(Self {
+            instance,
             device,
             queue,
             compute_pipelines,
@@ -224,9 +227,19 @@ impl VulkanoRunner {
         Ok((buffer_x, len))
     }
 
+    /// Get the Vulkan instance (needed for creating windows/surfaces)
+    pub fn instance(&self) -> &Arc<Instance> {
+        &self.instance
+    }
+
     /// Get the device (useful for creating graphics resources on the same device)
     pub fn device(&self) -> &Arc<Device> {
         &self.device
+    }
+
+    /// Get the queue (useful for graphics rendering on the same queue)
+    pub fn queue(&self) -> &Arc<Queue> {
+        &self.queue
     }
 
     /// Get the memory allocator

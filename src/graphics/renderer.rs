@@ -68,6 +68,43 @@ pub struct GraphicsRenderer {
 }
 
 impl GraphicsRenderer {
+    /// Create a new graphics renderer from an existing device and queue
+    ///
+    /// This version shares the device with the compute pipeline to enable
+    /// zero-copy buffer sharing between compute and graphics.
+    /// The device must have been created with KHR_swapchain extension enabled.
+    /// The queue must support both graphics operations and presentation to the surface.
+    pub fn from_device(
+        device: Arc<Device>,
+        queue: Arc<Queue>,
+        surface: Arc<Surface>,
+        vs: Arc<ShaderModule>,
+        fs: Arc<ShaderModule>,
+    ) -> CrateResult<Self> {
+        let physical_device = device.physical_device().clone();
+
+        println!(
+            "Using shared device: {} (type: {:?})",
+            physical_device.properties().device_name,
+            physical_device.properties().device_type
+        );
+
+        // Verify the queue supports presentation to this surface
+        let queue_family_index = queue.queue_family_index();
+        if !physical_device.surface_support(queue_family_index, &surface)? {
+            return Err(ChimeraError::Other(format!(
+                "Queue family {} does not support presentation to the surface",
+                queue_family_index
+            )));
+        }
+
+        // Get surface capabilities to create swapchain
+        let caps = physical_device.surface_capabilities(&surface, Default::default())?;
+
+        // Continue with swapchain creation
+        Self::init_with_device_and_queue(device, queue, physical_device, surface, caps, vs, fs)
+    }
+
     /// Create a new graphics renderer
     ///
     /// This sets up all the Vulkan resources needed for rendering.
@@ -113,9 +150,22 @@ impl GraphicsRenderer {
         // Get surface capabilities to create swapchain
         let caps = physical_device.surface_capabilities(&surface, Default::default())?;
 
+        Self::init_with_device_and_queue(device, queue, physical_device, surface, caps, vs, fs)
+    }
+
+    /// Common initialization logic for both constructors
+    fn init_with_device_and_queue(
+        device: Arc<Device>,
+        queue: Arc<Queue>,
+        physical_device: Arc<vulkano::device::physical::PhysicalDevice>,
+        surface: Arc<Surface>,
+        caps: vulkano::swapchain::SurfaceCapabilities,
+        vs: Arc<ShaderModule>,
+        fs: Arc<ShaderModule>,
+    ) -> CrateResult<Self> {
         // Choose swapchain format (color format for the images)
         let image_format = physical_device
-            .surface_formats(&surface, Default::default())?
+            .surface_formats(&*surface, Default::default())?
             .first()
             .ok_or_else(|| ChimeraError::Other("No surface formats available".to_string()))?
             .0;

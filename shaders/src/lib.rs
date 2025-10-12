@@ -108,7 +108,6 @@ pub fn main_vs(
     #[spirv(vertex_index)] vert_idx: i32,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] positions: &[Vec2],
     #[spirv(position)] builtin_pos: &mut Vec4,
-    out_color: &mut Vec4,
 ) {
     let idx = vert_idx as usize;
 
@@ -120,24 +119,15 @@ pub fn main_vs(
     let clip_pos = pos * 2.0 - Vec2::ONE;
 
     *builtin_pos = clip_pos.extend(0.0).extend(1.0);
-
-    // Generate a simple color based on the vertex index for visual variety
-    // We use modulo and simple arithmetic to create color variation
-    let color_factor = (idx % 256) as f32 / 256.0;
-    *out_color = Vec4::new(
-        0.3 + 0.7 * color_factor,         // Red varies from 0.3 to 1.0
-        0.5 + 0.5 * (1.0 - color_factor), // Green varies inversely
-        0.8,                              // Blue is constant
-        1.0,                              // Full opacity
-    );
 }
 
 /// Fragment shader for coloring the rendered points
 ///
-/// This simply outputs the interpolated color from the vertex shader.
+/// This outputs a simple constant color for all pixels.
 #[spirv(fragment)]
-pub fn main_fs(in_color: Vec4, output: &mut Vec4) {
-    *output = in_color;
+pub fn main_fs(output: &mut Vec4) {
+    // Simple white color
+    *output = Vec4::new(1.0, 1.0, 1.0, 1.0);
 }
 
 // ==============================================================================

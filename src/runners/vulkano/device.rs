@@ -7,12 +7,21 @@ use vulkano::{
     VulkanLibrary,
 };
 
-pub fn compute_capable_device_and_queue() -> CrateResult<(String, Arc<Device>, Arc<Queue>)> {
+pub fn compute_capable_device_and_queue() -> CrateResult<(Arc<Instance>, String, Arc<Device>, Arc<Queue>)> {
     // 1. Load the Vulkan library
     let library = VulkanLibrary::new()?;
 
-    // 2. Create instance
-    let instance = Instance::new(library, InstanceCreateInfo::default())?;
+    // 2. Create instance with surface extensions (required for graphics/swapchain)
+    let mut instance_info = InstanceCreateInfo::default();
+    // Enable surface extension and platform-specific window extensions
+    instance_info.enabled_extensions = vulkano::instance::InstanceExtensions {
+        khr_surface: true,
+        khr_xlib_surface: true,  // For X11/Linux
+        khr_xcb_surface: true,   // Alternative X11
+        khr_wayland_surface: true, // For Wayland/Linux
+        ..Default::default()
+    };
+    let instance = Instance::new(library, instance_info)?;
 
     // 3. Pick first physical device with a compute queue
     let physical = instance
@@ -22,20 +31,26 @@ pub fn compute_capable_device_and_queue() -> CrateResult<(String, Arc<Device>, A
 
     let device_name = physical.properties().device_name.clone();
 
-    // 4. Select a queue family that supports compute
+    // 4. Select a queue family that supports compute and graphics
+    // This allows both compute and graphics operations on the same queue
     let (queue_family_index, _q_props) = physical
         .queue_family_properties()
         .iter()
         .enumerate()
-        .find(|(_, q)| q.queue_flags.contains(vulkano::device::QueueFlags::COMPUTE))
+        .find(|(_, q)| {
+            q.queue_flags.contains(vulkano::device::QueueFlags::COMPUTE) &&
+            q.queue_flags.contains(vulkano::device::QueueFlags::GRAPHICS)
+        })
         .map(|(i, q)| (i as u32, q.clone()))
         .ok_or(ChimeraError::NoComputeQueue)?;
 
     // 5. Create logical device + queue
     // Enable storage buffer storage class extension (required by generated SPIR-V)
+    // Also enable swapchain extension so graphics rendering can share this device
     // Reference: Vulkano book compute pipeline chapter
     let required_extensions = DeviceExtensions {
         khr_storage_buffer_storage_class: true,
+        khr_swapchain: true, // Required for graphics rendering
         ..DeviceExtensions::empty()
     };
 
@@ -71,5 +86,5 @@ pub fn compute_capable_device_and_queue() -> CrateResult<(String, Arc<Device>, A
         .next()
         .ok_or_else(|| ChimeraError::Other("Failed to get compute queue".into()))?;
 
-    Ok((device_name, device, queue))
+    Ok((instance, device_name, device, queue))
 }
