@@ -21,6 +21,7 @@ use shared::WORKGROUP_SIZE;
 use std::{collections::HashMap, sync::Arc};
 
 use vulkano::{
+    buffer::Subbuffer,
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
     },
@@ -152,6 +153,85 @@ impl VulkanoRunner {
         x.copy_from_slice(&buffers.0["x"].read_vec2()[..len]);
 
         Ok(())
+    }
+
+    /// Run compute shaders and return the x buffer for graphics rendering
+    ///
+    /// This is similar to run_compute_shader_sequence but returns the GPU buffer
+    /// instead of copying data back to CPU. This allows the graphics pipeline to
+    /// directly read from the same buffer that the compute shaders wrote to.
+    pub fn run_compute_and_get_buffer(
+        &self,
+        a: &mut [u32],
+        b: &[u32],
+        c: &[u32],
+        d: &[u32],
+        x: &mut [Vec2],
+        v: &[Vec2],
+    ) -> CrateResult<(Subbuffer<[Vec2]>, usize)> {
+        assert_eq!(a.len(), b.len());
+        let len = a.len();
+        let num_workgroups = (len as u32).div_ceil(WORKGROUP_SIZE);
+
+        let alloc = self.memory_allocator.clone();
+        let buffer_a = build_and_fill_buffer(alloc.clone(), a)?;
+        let buffer_b = build_and_fill_buffer(alloc.clone(), b)?;
+        let buffer_c = build_and_fill_buffer(alloc.clone(), c)?;
+        let buffer_d = build_and_fill_buffer(alloc.clone(), d)?;
+        let buffer_x = build_and_fill_buffer(alloc.clone(), x)?;
+        let buffer_v = build_and_fill_buffer(alloc.clone(), v)?;
+
+        let buffers = BufNameToBufferAny(HashMap::from([
+            ("a".to_string(), buffer_a.into()),
+            ("b".to_string(), buffer_b.into()),
+            ("c".to_string(), buffer_c.into()),
+            ("d".to_string(), buffer_d.into()),
+            ("x".to_string(), buffer_x.clone().into()),
+            ("v".to_string(), buffer_v.into()),
+        ]));
+
+        let compute_pipelines_with_desc_sets = self
+            .compute_pipelines
+            .with_descriptor_sets(self.descriptor_set_allocator.clone(), &buffers)?;
+
+        let mut builder = AutoCommandBufferBuilder::primary(
+            self.command_buffer_allocator.clone(),
+            self.queue.queue_family_index(),
+            CommandBufferUsage::OneTimeSubmit,
+        )?;
+
+        compute_pipelines_with_desc_sets
+            .bind_and_dispatch_all(&mut builder, num_workgroups)
+            .inspect_err(|e| println!("Error during bind_and_dispatch_all: {e}"))?;
+
+        println!("  Dispatching compute on device '{}'", self.device_name);
+
+        let command_buffer = builder.build()?;
+
+        let future = sync::now(self.device.clone())
+            .then_execute(self.queue.clone(), command_buffer)?
+            .then_signal_fence_and_flush()?;
+        future.wait(None)?;
+
+        // Read back 'a' buffer to host memory
+        let content = &buffers.0["a"].read_u32()[..len];
+        a.copy_from_slice(&content);
+
+        // Also read x buffer to update the host copy
+        x.copy_from_slice(&buffers.0["x"].read_vec2()[..len]);
+
+        // Return the x buffer for graphics rendering
+        Ok((buffer_x, len))
+    }
+
+    /// Get the device (useful for creating graphics resources on the same device)
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    /// Get the memory allocator
+    pub fn memory_allocator(&self) -> &Arc<StandardMemoryAllocator> {
+        &self.memory_allocator
     }
 }
 

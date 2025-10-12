@@ -7,6 +7,7 @@
 #![feature(once_cell_try)]
 
 pub mod error;
+pub mod graphics;
 pub mod runners;
 pub use runners::VulkanoRunner;
 
