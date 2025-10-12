@@ -89,7 +89,7 @@ impl VulkanoRunner {
         })
     }
 
-    pub fn execute_adder_kernel_pass(
+    pub fn run_compute_shader_sequence(
         &self,
         a: &mut [u32],
         b: &[u32],

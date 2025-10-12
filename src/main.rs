@@ -18,90 +18,20 @@ fn run_add_test(
     v: &[Vec2],
 ) -> Result<()> {
     // Get and log backend info
-
-    let len = a.len();
-    let original_first_10_a = a[..10.min(len)].to_vec();
-    let original_first_10_b = b[..10.min(len)].to_vec();
+    let n = a.len();
     // Display results
-    println!("\n  Original `a` (first 10 ): {original_first_10_a:?}");
-    println!("  Original `b` (first 10 ): {original_first_10_b:?}");
+    println!("    `a` pre: {:?}", &a[..10.min(n)]);
+    println!("    `x` pre: {:?}", &x[..10.min(n)]);
 
-    println!("\n  Original `x` (first 10 ): {:?}", &x[..10.min(len)]);
+    runner.run_compute_shader_sequence(a, b, c, d, x, v)?;
 
-    runner.execute_adder_kernel_pass(a, b, c, d, x, v)?;
-    println!("  ➕ Addition operation completed successfully.");
-
-    println!("\n  Post `x` (first 10 ): {:?}", &x[..10.min(len)]);
-
-    println!(
-        "  Result in `a` after adds (first 10): {:?}",
-        &a[..10.min(len)]
-    );
-
-    Ok(())
-}
-
-fn run_test_on_backend<T>(
-    data: &mut [T],
-    entry_point_names_to_buffers: ComputePassInvocationInfo,
-) -> Result<()>
-where
-    T: bytemuck::Pod + Send + Sync + std::fmt::Debug + PartialOrd + Clone,
-{
-    {
-        let mut gpu_executed = false;
-
-        let mut x = (0..data.len() as u32)
-            .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
-            .collect::<Vec<Vec2>>();
-
-        let v = (0..data.len() as u32)
-            .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
-            .collect::<Vec<Vec2>>();
-
-        if !gpu_executed {
-            let runner = VulkanoRunner::new(entry_point_names_to_buffers.clone());
-            match &runner {
-                Ok(r) => {
-                    run_add_test(
-                        &r,
-                        &mut vec![1u32; data.len()],
-                        &(0..data.len() as u32).collect::<Vec<u32>>(),
-                        &vec![30u32; data.len()],
-                        &(0..data.len() as u32).map(|x| x * x).collect::<Vec<u32>>(),
-                        &mut x,
-                        &v,
-                    )?;
-                    gpu_executed = true;
-                }
-                Err(e) => {
-                    eprintln!("  Vulkano initialization failed: {e}")
-                }
-            }
-        }
-
-        if !gpu_executed {
-            eprintln!("\n  ❌ No GPU backend available");
-            return Err(anyhow::anyhow!("No GPU backend available"));
-        }
-    }
+    println!("    `a` post: {:?}", &a[..10.min(n)]);
+    println!("    `x` post: {:?}", &x[..10.min(n)]);
 
     Ok(())
 }
 
 fn main() -> Result<()> {
-    // let n = 256;
-
-    // let a = vec![1u32; n];
-    // let b = (0..n as u32).collect::<Vec<u32>>();
-    // let x = (0..n as u32)
-    //     .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
-    //     .collect::<Vec<Vec2>>();
-
-    // let v = (0..n as u32)
-    //     .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
-    //     .collect::<Vec<Vec2>>();
-
     let adder_kernel = ("adder", vec![0, 1]);
     let step_particles_kernel = ("step_particles", vec![2, 3]);
     let wrap_particles_kernel = ("wrap_particles", vec![2]);
@@ -133,11 +63,30 @@ fn main() -> Result<()> {
         ("wrap_particles", vec!["x"], wrap_particles_kernel.clone()),
     ]);
 
-    let mut f32_data = vec![0.0f32; 1000];
-    for (i, v) in f32_data.iter_mut().enumerate() {
-        *v = ((i as f32 * std::f32::consts::PI) - 500.0) * 0.123;
+    let n = 256;
+
+    let mut a = vec![1u32; n];
+    let b = (0..n as u32).collect::<Vec<u32>>();
+    let c = vec![30u32; n];
+    let d = (0..n as u32).map(|x| x * x).collect::<Vec<u32>>();
+
+    let mut x = (0..n as u32)
+        .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
+        .collect::<Vec<Vec2>>();
+
+    let v = (0..n as u32)
+        .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
+        .collect::<Vec<Vec2>>();
+
+    let runner = VulkanoRunner::new(shader_buffers);
+    match &runner {
+        Ok(r) => {
+            run_add_test(&r, &mut a, &b, &c, &d, &mut x, &v)?;
+        }
+        Err(e) => {
+            eprintln!("  Vulkano initialization failed: {e}")
+        }
     }
-    run_test_on_backend(&mut f32_data, shader_buffers)?;
 
     Ok(())
 }
