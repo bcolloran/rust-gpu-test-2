@@ -31,52 +31,44 @@ pub enum ChimeraError {
     #[error("Failed to find compute queue family")]
     NoComputeQueue,
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano error: {0}")]
     Vulkano(String),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano LoadingError: {0}")]
     VulkanoLoadingError(#[from] vulkano::LoadingError),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano VulkanError: {0}")]
     VulkanoVulkanError(#[from] vulkano::VulkanError),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano ValidationError: {0}")]
     VulkanoValidationError(#[from] vulkano::ValidationError),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano SpirvBytesNotMultipleOf4: {0}")]
     VulkanoSpirvBytesNotMultipleOf4(#[from] vulkano::shader::spirv::SpirvBytesNotMultipleOf4),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano CommandBufferExecError: {0}")]
     VulkanoCommandBufferExecError(#[from] CommandBufferExecError),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano HostAccessError: {0}")]
     VulkanoHostAccessError(#[from] HostAccessError),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano ValidatedAllocateBufferError: {0}")]
     VulkanoValidatedAllocateBufferError(#[from] Validated<AllocateBufferError>),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano ValidatedAllocateBufferError: {0}")]
     VulkanoBoxedValidationError(#[from] Box<vulkano::ValidationError>),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano VulkanoValidatedValidationError: {0}")]
     VulkanoValidatedValidationError(#[from] Validated<vulkano::ValidationError>),
 
-    #[cfg(feature = "vulkano")]
     #[error("vulkano VulkanoValidatedVulkanError: {0}")]
     VulkanoValidatedVulkanError(#[from] Validated<vulkano::VulkanError>),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("Graphics error: {0}")]
+    Graphics(#[from] crate::graphics::error::GraphicsError),
 
     #[error("Other error: {0}")]
     Other(String),

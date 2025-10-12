@@ -9,6 +9,7 @@
 //! though it shares the same Vulkan device and can access the same buffers.
 
 pub mod device;
+pub mod error;
 pub mod pipeline;
 pub mod renderer;
 
