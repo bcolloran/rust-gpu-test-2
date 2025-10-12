@@ -22,6 +22,7 @@ fn run_add_test(
     // Display results
     println!("    `a` pre: {:?}", &a[..10.min(n)]);
     println!("    `x` pre: {:?}", &x[..10.min(n)]);
+    println!("    `v` pre: {:?}", &v[..10.min(n)]);
 
     runner.run_compute_shader_sequence(a, b, c, d, x, v)?;
 
@@ -75,7 +76,7 @@ fn main() -> Result<()> {
         .collect::<Vec<Vec2>>();
 
     let v = (0..n as u32)
-        .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
+        .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()) / 1000.0)
         .collect::<Vec<Vec2>>();
 
     let runner = VulkanoRunner::new(shader_buffers);
