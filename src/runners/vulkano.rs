@@ -75,12 +75,6 @@ impl VulkanoRunner {
             shader_bufs_and_entries.with_descriptor_sets(device.clone())?;
         println!("Descriptor set layouts created");
 
-        // build_abstract_descriptor_set_layouts(
-        //     device.clone(),
-        //     shader_bufs_and_entries.clone(),
-        //     global_buf_to_binding,
-        // )?;
-
         let compute_pipelines = descriptor_set_layouts.with_pipelines(device.clone())?;
 
         println!("VulkanoRunner::new ok");
@@ -136,10 +130,12 @@ impl VulkanoRunner {
             self.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )?;
+
         compute_pipelines_with_desc_sets
             .bind_and_dispatch_all(&mut builder, num_workgroups)
             .inspect_err(|e| println!("Error during bind_and_dispatch_all: {e}"))?;
-        print!("  Dispatching compute on device '{}'", self.device_name);
+
+        println!("  Dispatching compute on device '{}'", self.device_name);
 
         let command_buffer = builder.build()?;
 

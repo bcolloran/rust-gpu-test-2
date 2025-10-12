@@ -211,7 +211,7 @@ impl ShaderPipelineInfosWithEntry {
     pub fn with_descriptor_sets(
         &self,
         device: Arc<Device>,
-        // global_buf_to_binding: BufNameToBinding,
+        // global_buf_to_binding: ,
     ) -> CrateResult<ShaderPipelineInfosWithDescriptorSetLayouts> {
         let mut pipelines = Vec::new();
 
@@ -233,7 +233,6 @@ impl ShaderPipelineInfosWithEntry {
                 binding_desc.stages = ShaderStages::COMPUTE;
                 binding_desc.descriptor_count = 1;
 
-                // let binding = global_buf_to_binding[&buf_name];
                 println!(
                     "   Buffer name '{}' mapped to binding {}",
                     buf_name, shader_binding_num
@@ -297,16 +296,12 @@ impl ShaderPipelineInfosWithComputePipelines {
     pub fn with_descriptor_sets(
         &self,
         descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
-        // write_descriptor_sets_map: &HashMap<String, Vec<WriteDescriptorSet>>,
         buf_any_map: &BufNameToBufferAny,
     ) -> CrateResult<ShaderPipelineInfosWithDescriptorSets> {
         let new_pipelines = self
             .pipelines
             .iter()
             .map(|pipeline_info| {
-                // let write_descriptor_sets =
-                //     &write_descriptor_sets_map[&pipeline_info.invocation_name];
-
                 let write_descriptor_sets: Vec<WriteDescriptorSet> = pipeline_info
                     .buf_names
                     .iter()
