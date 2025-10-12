@@ -3,7 +3,7 @@
 //! This module builds the graphics pipeline that renders Vec2 points as pixels.
 //! The pipeline uses shaders compiled from rust-gpu (shaders/src/lib.rs).
 
-use crate::error::{ChimeraError, CrateResult};
+use crate::error::CrateResult;
 use glam::Vec2;
 use std::sync::Arc;
 use vulkano::{
@@ -41,12 +41,16 @@ pub fn create_graphics_pipeline(
     viewport: Viewport,
 ) -> CrateResult<Arc<GraphicsPipeline>> {
     // Get the entry points from the shader modules
-    let vs = vs.entry_point("main_vs").ok_or_else(|| {
-        ChimeraError::Other("Vertex shader entry point 'main_vs' not found".to_string())
-    })?;
-    let fs = fs.entry_point("main_fs").ok_or_else(|| {
-        ChimeraError::Other("Fragment shader entry point 'main_fs' not found".to_string())
-    })?;
+    let vs = vs.entry_point("main_vs").ok_or(
+        crate::graphics::error::GraphicsError::VertexShaderEntryPointNotFound(
+            "main_vs".to_string(),
+        ),
+    )?;
+    let fs = fs.entry_point("main_fs").ok_or(
+        crate::graphics::error::GraphicsError::FragmentShaderEntryPointNotFound(
+            "main_fs".to_string(),
+        ),
+    )?;
 
     // We're not using traditional vertex buffers - positions come from a storage buffer
     let vertex_input_state = VertexInputState::new();
@@ -60,12 +64,11 @@ pub fn create_graphics_pipeline(
     let layout = PipelineLayout::new(
         device.clone(),
         PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
-            .into_pipeline_layout_create_info(device.clone())
-            .map_err(|e| ChimeraError::Other(format!("Failed to create pipeline layout: {}", e)))?,
+            .into_pipeline_layout_create_info(device.clone())?,
     )?;
 
     let subpass = Subpass::from(render_pass.clone(), 0)
-        .ok_or_else(|| ChimeraError::Other("Failed to create subpass".to_string()))?;
+        .ok_or(crate::graphics::error::GraphicsError::SubpassCreationFailed)?;
 
     // Build the graphics pipeline
     let pipeline = GraphicsPipeline::new(
@@ -115,10 +118,11 @@ pub fn create_descriptor_set(
         vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator,
     >,
 ) -> CrateResult<Arc<DescriptorSet>> {
-    let layout =
-        pipeline.layout().set_layouts().get(0).ok_or_else(|| {
-            ChimeraError::Other("No descriptor set layout at index 0".to_string())
-        })?;
+    let layout = pipeline
+        .layout()
+        .set_layouts()
+        .get(0)
+        .ok_or(crate::graphics::error::GraphicsError::NoDescriptorSetLayout(0))?;
 
     let descriptor_set = DescriptorSet::new(
         descriptor_set_allocator.clone(),

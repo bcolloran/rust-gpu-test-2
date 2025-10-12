@@ -481,11 +481,9 @@ fn main() {
             }
 
             let (image_i, suboptimal, acquire_future) =
-                match swapchain::acquire_next_image(swapchain.clone(), None)
-                    .map_err(Validated::unwrap)
-                {
+                match swapchain::acquire_next_image(swapchain.clone(), None) {
                     Ok(r) => r,
-                    Err(VulkanError::OutOfDate) => {
+                    Err(Validated::Error(VulkanError::OutOfDate)) => {
                         recreate_swapchain = true;
                         return;
                     }
@@ -523,9 +521,9 @@ fn main() {
                 )
                 .then_signal_fence_and_flush();
 
-            fences[image_i as usize] = match future.map_err(Validated::unwrap) {
+            fences[image_i as usize] = match future {
                 Ok(value) => Some(Arc::new(value)),
-                Err(VulkanError::OutOfDate) => {
+                Err(Validated::Error(VulkanError::OutOfDate)) => {
                     recreate_swapchain = true;
                     None
                 }

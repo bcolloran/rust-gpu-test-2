@@ -3,7 +3,7 @@
 //! This module handles finding and creating a Vulkan device that supports
 //! both graphics operations and presentation to a window surface.
 
-use crate::error::{ChimeraError, CrateResult};
+use crate::error::CrateResult;
 use std::sync::Arc;
 use vulkano::{
     device::{
@@ -50,7 +50,7 @@ pub fn select_physical_device(
                 _ => 4,
             }
         })
-        .ok_or_else(|| ChimeraError::Other("No suitable device available for graphics".to_string()))
+        .ok_or(crate::graphics::error::GraphicsError::NoSuitableDevice.into())
 }
 
 /// Create a Vulkan instance with extensions required for windowing

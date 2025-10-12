@@ -7,7 +7,7 @@
 //! - Synchronization for frame pacing
 
 use crate::{
-    error::{ChimeraError, CrateResult},
+    error::CrateResult,
     graphics::{
         device::select_physical_device,
         pipeline::{create_descriptor_set, create_graphics_pipeline},
@@ -92,10 +92,12 @@ impl GraphicsRenderer {
         // Verify the queue supports presentation to this surface
         let queue_family_index = queue.queue_family_index();
         if !physical_device.surface_support(queue_family_index, &surface)? {
-            return Err(ChimeraError::Other(format!(
-                "Queue family {} does not support presentation to the surface",
-                queue_family_index
-            )));
+            return Err(
+                crate::graphics::error::GraphicsError::QueueDoesNotSupportPresentation(
+                    queue_family_index,
+                )
+                .into(),
+            );
         }
 
         // Get surface capabilities to create swapchain
@@ -145,7 +147,7 @@ impl GraphicsRenderer {
 
         let queue = queues
             .next()
-            .ok_or_else(|| ChimeraError::Other("No queue available".to_string()))?;
+            .ok_or(crate::graphics::error::GraphicsError::NoQueueAvailable)?;
 
         // Get surface capabilities to create swapchain
         let caps = physical_device.surface_capabilities(&surface, Default::default())?;
@@ -167,7 +169,7 @@ impl GraphicsRenderer {
         let image_format = physical_device
             .surface_formats(&*surface, Default::default())?
             .first()
-            .ok_or_else(|| ChimeraError::Other("No surface formats available".to_string()))?
+            .ok_or(crate::graphics::error::GraphicsError::NoSurfaceFormatsAvailable)?
             .0;
 
         // Choose composite alpha (how the window is blended with desktop)
@@ -175,7 +177,7 @@ impl GraphicsRenderer {
             .supported_composite_alpha
             .into_iter()
             .next()
-            .ok_or_else(|| ChimeraError::Other("No composite alpha modes available".to_string()))?;
+            .ok_or(crate::graphics::error::GraphicsError::NoCompositeAlphaModesAvailable)?;
 
         // Create the swapchain (a set of images we can render to and present)
         let (swapchain, images) = Swapchain::new(
@@ -305,11 +307,9 @@ impl GraphicsRenderer {
     pub fn render_frame(&mut self) -> CrateResult<()> {
         // Acquire the next image from the swapchain
         let (image_i, suboptimal, acquire_future) =
-            match swapchain::acquire_next_image(self.swapchain.clone(), None)
-                .map_err(Validated::unwrap)
-            {
+            match swapchain::acquire_next_image(self.swapchain.clone(), None) {
                 Ok(r) => r,
-                Err(VulkanError::OutOfDate) => {
+                Err(Validated::Error(VulkanError::OutOfDate)) => {
                     // Swapchain is out of date (e.g., window resized), need to recreate
                     self.recreate_swapchain = true;
                     return Ok(());
@@ -336,17 +336,18 @@ impl GraphicsRenderer {
             )
             .then_signal_fence_and_flush();
 
-        match future.map_err(Validated::unwrap) {
+        match future {
             Ok(future) => {
                 // Wait for the operation to complete
                 // In a real app, you'd want async handling here
                 future.wait(None)?;
             }
-            Err(VulkanError::OutOfDate) => {
+            Err(Validated::Error(VulkanError::OutOfDate)) => {
                 self.recreate_swapchain = true;
             }
             Err(e) => {
                 println!("Failed to flush future: {e}");
+                return Err(e.into());
             }
         }
 

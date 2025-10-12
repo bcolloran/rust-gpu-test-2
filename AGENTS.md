@@ -55,6 +55,134 @@ When generating code in a macro, always use fully qualified paths to refer to ty
 Be sure to break up the macro implementation into small, manageable functions that handle specific parts/cases of the macro expansion. This will make the code easier to read and maintain, and, most importantly, will make the tests easier to write and understand (it is essential for reviews that the macros give clear examples of input and output; breaking up the macro implementation into small functions helps with this).
 
 
+# Error handling
+When implementing new features or modules, proper error handling is essential for maintainability and debuggability. This project uses a two-tier error system with strict conventions.
+
+## Error hierarchy and conventions
+
+### Two-tier error system
+1. **`ChimeraError`** (top-level, in `src/error.rs`): Contains ALL library error types from external crates (vulkano, std, etc.) with `#[from]` attribute for automatic conversion
+2. **Module-specific errors** (e.g., `GraphicsError`): Contains ONLY semantic/domain-specific errors that originate in our code (e.g., "no suitable device found", "shader entry point not found")
+
+### Critical rule: NEVER use `map_err` for error conversion
+**Always use the `?` operator directly and rely on automatic `From` trait conversions.** If you find yourself writing `.map_err()`, you're doing it wrong.
+
+```rust
+// ❌ BAD: Using map_err for conversion
+let result = some_operation()
+    .map_err(Into::into)?;
+
+// ❌ BAD: Using map_err with string formatting
+let result = some_operation()
+    .map_err(|e| ChimeraError::Other(format!("Failed: {e}")))?;
+
+// ✅ GOOD: Direct ? operator with automatic conversion
+let result = some_operation()?;
+```
+
+### Where to put error variants
+
+**Library errors → `ChimeraError`**
+- Any error type from an external crate (vulkano, std::io::Error, etc.)
+- Add a variant to `ChimeraError` with `#[from]` attribute
+- This enables automatic conversion via `?` operator
+
+```rust
+// In src/error.rs
+#[derive(Error, Debug)]
+pub enum ChimeraError {
+    #[error("vulkano VulkanError: {0}")]
+    VulkanoVulkanError(#[from] vulkano::VulkanError),
+    
+    #[error("vulkano ValidatedVulkanError: {0}")]
+    VulkanoValidatedVulkanError(#[from] Validated<vulkano::VulkanError>),
+    
+    // ... more library errors
+}
+```
+
+**Semantic errors → Module-specific error enums**
+- Errors that represent business logic failures in YOUR code
+- Usually come from `.ok_or()` on `Option` types
+- Should be descriptive and include context
+
+```rust
+// In src/graphics/error.rs
+#[derive(Error, Debug)]
+pub enum GraphicsError {
+    #[error("No suitable device found")]
+    NoSuitableDevice,
+    
+    #[error("Vertex shader entry point '{0}' not found")]
+    VertexShaderEntryPointNotFound(String),
+    
+    // ... more semantic errors
+}
+```
+
+### Handling `Validated<T>` errors from Vulkano
+Vulkano wraps some errors in `Validated<T>`. **Do NOT use `.map_err(Validated::unwrap)`**. Instead, add the `Validated<ErrorType>` to `ChimeraError` with `#[from]` and match on `Validated::Error` when you need to handle specific error cases.
+
+```rust
+// ❌ BAD: Using map_err to unwrap Validated
+let result = operation().map_err(Validated::unwrap)?;
+
+// ✅ GOOD: Add Validated<ErrorType> to ChimeraError, then use ? directly
+// In src/error.rs:
+#[error("vulkano ValidatedVulkanError: {0}")]
+VulkanoValidatedVulkanError(#[from] Validated<vulkano::VulkanError>),
+
+// In your code - automatic conversion:
+let result = operation()?;
+
+// In your code - matching specific errors when needed:
+match operation() {
+    Ok(value) => value,
+    Err(Validated::Error(VulkanError::OutOfDate)) => {
+        // Handle specific error
+    }
+    Err(e) => return Err(e.into()),
+}
+```
+
+## Avoid the `Other(String)` escape hatch
+The `ChimeraError::Other(String)` variant exists as a last resort but should be avoided in production code. Every error should have its own specific variant in the appropriate error enum.
+
+## Implementation strategy
+When you encounter an error that doesn't have a proper variant:
+
+1. **Identify the error type**: Remove the problematic error handling and attempt to compile - the compiler will reveal the actual error type
+2. **Determine where it belongs**:
+   - **Library error?** Add a variant to `ChimeraError` with `#[from]`
+   - **Semantic error?** Add a variant to the module-specific error enum
+3. **Use `?` operator**: Never use `.map_err()` - always rely on automatic `From` conversions
+
+Example workflow:
+```rust
+// Step 1: You have this bad code
+let device = devices.next()
+    .ok_or_else(|| ChimeraError::Other("No device found".to_string()))?;
+
+// Step 2: Add semantic error variant to module error enum
+#[derive(Error, Debug)]
+pub enum GraphicsError {
+    #[error("No suitable device found")]
+    NoSuitableDevice,
+}
+
+// Step 3: Use it directly
+let device = devices.next()
+    .ok_or(GraphicsError::NoSuitableDevice)?;
+```
+
+## Summary of rules
+1. **Library errors** → `ChimeraError` with `#[from]`
+2. **Semantic errors** → Module-specific error enums (e.g., `GraphicsError`)
+3. **NEVER** use `.map_err()` for error conversion
+4. **ALWAYS** use `?` operator with automatic `From` conversions
+5. For `Validated<T>` errors, add `Validated<T>` to `ChimeraError` with `#[from]`
+6. Avoid `ChimeraError::Other(String)` in production code
+
 
 # Reference materials
 The agent may examine the contents of the folder `reference_material/` for reference materials

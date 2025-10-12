@@ -64,6 +64,11 @@ pub enum ChimeraError {
     #[error("vulkano VulkanoValidatedVulkanError: {0}")]
     VulkanoValidatedVulkanError(#[from] Validated<vulkano::VulkanError>),
 
+    #[error("vulkano IntoPipelineLayoutCreateInfoError: {0}")]
+    VulkanoIntoPipelineLayoutCreateInfoError(
+        #[from] vulkano::pipeline::layout::IntoPipelineLayoutCreateInfoError,
+    ),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
