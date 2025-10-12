@@ -211,18 +211,17 @@ impl ShaderPipelineInfosWithEntry {
     pub fn with_descriptor_sets(
         &self,
         device: Arc<Device>,
-        // global_buf_to_binding: ,
     ) -> CrateResult<ShaderPipelineInfosWithDescriptorSetLayouts> {
         let mut pipelines = Vec::new();
 
         for pipeline_info in self.pipelines.iter() {
-            println!(
-                "Processing pipeline invocation '{}', entry point '{}'",
-                pipeline_info.invocation_name, pipeline_info.entry_point_name
-            );
+            // println!(
+            //     "Processing pipeline invocation '{}', entry point '{}'",
+            //     pipeline_info.invocation_name, pipeline_info.entry_point_name
+            // );
             let mut bindings = BTreeMap::new();
 
-            for (buf_name, shader_binding_num) in pipeline_info
+            for (_buf_name, shader_binding_num) in pipeline_info
                 .buf_names
                 .clone()
                 .iter()
@@ -233,10 +232,10 @@ impl ShaderPipelineInfosWithEntry {
                 binding_desc.stages = ShaderStages::COMPUTE;
                 binding_desc.descriptor_count = 1;
 
-                println!(
-                    "   Buffer name '{}' mapped to binding {}",
-                    buf_name, shader_binding_num
-                );
+                // println!(
+                //     "   Buffer name '{}' mapped to binding {}",
+                //     buf_name, shader_binding_num
+                // );
                 bindings.insert(*shader_binding_num, binding_desc);
             }
 
