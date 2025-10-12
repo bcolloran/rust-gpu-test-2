@@ -1,4 +1,4 @@
-use crate::error::{ChimeraError, Result};
+use crate::error::{ChimeraError, CrateResult};
 
 use std::sync::Arc;
 
@@ -7,7 +7,7 @@ use vulkano::{
     shader::{EntryPoint, ShaderModule},
 };
 
-pub fn shader_module(device: Arc<Device>) -> Result<Arc<ShaderModule>> {
+pub fn shader_module(device: Arc<Device>) -> CrateResult<Arc<ShaderModule>> {
     // Create shader module from embedded SPIR-V
     let kernel_bytes = crate::OTHER_SHADERS_SPIRV;
     // Convert SPIR-V bytes to words then create shader module
@@ -32,7 +32,7 @@ pub fn shader_module(device: Arc<Device>) -> Result<Arc<ShaderModule>> {
 pub fn shader_entry_point(
     shader_module: Arc<ShaderModule>,
     entry_point_name: &str,
-) -> Result<EntryPoint> {
+) -> CrateResult<EntryPoint> {
     Ok(shader_module.entry_point(entry_point_name).ok_or_else(|| {
         ChimeraError::Other(format!(
             "Entry point '{entry_point_name}' not found in SPIR-V"

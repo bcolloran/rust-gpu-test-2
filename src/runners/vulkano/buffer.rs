@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::CrateResult;
 use std::{collections::HashMap, ops::Index, sync::Arc};
 
 use glam::Vec2;
@@ -127,7 +127,7 @@ impl Index<&str> for BufNameToBinding {
 pub fn build_and_fill_buffer<T: BufferContents + Copy>(
     memory_allocator: Arc<StandardMemoryAllocator>,
     data: &[T],
-) -> Result<Subbuffer<[T]>> {
+) -> CrateResult<Subbuffer<[T]>> {
     let usage = BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
 
     let buffer: Subbuffer<[T]> = Buffer::from_iter(
@@ -151,7 +151,7 @@ pub fn build_and_fill_buffer_and_get_write_descriptor_set<T: BufferContents + Co
     memory_allocator: Arc<StandardMemoryAllocator>,
     data: &[T],
     buffer_index: u32,
-) -> Result<(Subbuffer<[T]>, WriteDescriptorSet)> {
+) -> CrateResult<(Subbuffer<[T]>, WriteDescriptorSet)> {
     let usage = BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
 
     let buffer: Subbuffer<[T]> = Buffer::from_iter(

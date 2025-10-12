@@ -19,7 +19,7 @@ use vulkano::{
 };
 
 use crate::{
-    error::Result,
+    error::CrateResult,
     runners::vulkano::{
         buffer::BufNameToBufferAny, dispatch::bind_and_dispatch, pipeline::build_pipeline,
         shader::shader_entry_point,
@@ -212,7 +212,7 @@ impl ShaderPipelineInfosWithEntry {
         &self,
         device: Arc<Device>,
         // global_buf_to_binding: BufNameToBinding,
-    ) -> Result<ShaderPipelineInfosWithDescriptorSetLayouts> {
+    ) -> CrateResult<ShaderPipelineInfosWithDescriptorSetLayouts> {
         let mut pipelines = Vec::new();
 
         for pipeline_info in self.pipelines.iter() {
@@ -263,7 +263,7 @@ impl ShaderPipelineInfosWithDescriptorSetLayouts {
     pub fn with_pipelines(
         &self,
         device: Arc<Device>,
-    ) -> Result<ShaderPipelineInfosWithComputePipelines> {
+    ) -> CrateResult<ShaderPipelineInfosWithComputePipelines> {
         let new_pipelines = self
             .pipelines
             .iter()
@@ -281,7 +281,7 @@ impl ShaderPipelineInfosWithDescriptorSetLayouts {
                 })?;
                 Ok(pipeline_info.with_pipeline(pipeline))
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<CrateResult<Vec<_>>>()?;
         Ok(ShaderPipelineInfosWithComputePipelines {
             pipelines: new_pipelines,
         })
@@ -299,7 +299,7 @@ impl ShaderPipelineInfosWithComputePipelines {
         descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
         // write_descriptor_sets_map: &HashMap<String, Vec<WriteDescriptorSet>>,
         buf_any_map: &BufNameToBufferAny,
-    ) -> Result<ShaderPipelineInfosWithDescriptorSets> {
+    ) -> CrateResult<ShaderPipelineInfosWithDescriptorSets> {
         let new_pipelines = self
             .pipelines
             .iter()
@@ -330,7 +330,7 @@ impl ShaderPipelineInfosWithComputePipelines {
 
                 Ok(pipeline_info.with_descriptor_set(descriptor_set))
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<CrateResult<Vec<_>>>()?;
         Ok(ShaderPipelineInfosWithDescriptorSets {
             pipelines: new_pipelines,
         })
@@ -347,7 +347,7 @@ impl ShaderPipelineInfosWithDescriptorSets {
         &self,
         builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         num_wg: u32,
-    ) -> Result<()> {
+    ) -> CrateResult<()> {
         for pipeline_info in self.pipelines.iter() {
             builder.bind_pipeline_compute(pipeline_info.pipeline.clone())?;
             bind_and_dispatch(

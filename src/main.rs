@@ -10,7 +10,6 @@ use rust_gpu_chimera_demo::{
 
 fn run_add_test(
     runner: &VulkanoRunner,
-    // global_buf_to_binding: BufNameToBinding,
     a: &mut [u32],
     b: &[u32],
     c: &[u32],
@@ -29,10 +28,7 @@ fn run_add_test(
 
     println!("\n  Original `x` (first 10 ): {:?}", &x[..10.min(len)]);
 
-    runner.execute_adder_kernel_pass(
-        // global_buf_to_binding,
-        a, b, c, d, x, v,
-    )?;
+    runner.execute_adder_kernel_pass(a, b, c, d, x, v)?;
     println!("  ➕ Addition operation completed successfully.");
 
     println!("\n  Post `x` (first 10 ): {:?}", &x[..10.min(len)]);
@@ -47,7 +43,6 @@ fn run_add_test(
 
 fn run_test_on_backend<T>(
     data: &mut [T],
-    // global_buf_to_binding: BufNameToBinding,
     entry_point_names_to_buffers: ComputePassInvocationInfo,
 ) -> Result<()>
 where
@@ -65,16 +60,11 @@ where
             .collect::<Vec<Vec2>>();
 
         if !gpu_executed {
-            let runner = VulkanoRunner::new(
-                // global_buf_to_binding.clone(),
-                entry_point_names_to_buffers.clone(),
-            );
+            let runner = VulkanoRunner::new(entry_point_names_to_buffers.clone());
             match &runner {
                 Ok(r) => {
-                    // run_sort_test(&runner, data, test_type, order)?;
                     run_add_test(
                         &r,
-                        // global_buf_to_binding.clone(),
                         &mut vec![1u32; data.len()],
                         &(0..data.len() as u32).collect::<Vec<u32>>(),
                         &vec![30u32; data.len()],
@@ -100,28 +90,17 @@ where
 }
 
 fn main() -> Result<()> {
-    // let global_buf_to_binding = BufNameToBinding::from_list(vec![
-    //     ("a", 0),
-    //     ("b", 1),
-    //     ("x", 2),
-    //     ("v", 3),
-    //     ("c", 4),
-    //     ("d", 5),
-    // ]);
+    // let n = 256;
 
-    let n = 256;
+    // let a = vec![1u32; n];
+    // let b = (0..n as u32).collect::<Vec<u32>>();
+    // let x = (0..n as u32)
+    //     .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
+    //     .collect::<Vec<Vec2>>();
 
-    let a = vec![1u32; n];
-    let b = (0..n as u32).collect::<Vec<u32>>();
-    let x = (0..n as u32)
-        .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
-        .collect::<Vec<Vec2>>();
-
-    let v = (0..n as u32)
-        .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
-        .collect::<Vec<Vec2>>();
-
-    let bufs = (("a", a), ("b", b), ("x", x), ("v", v));
+    // let v = (0..n as u32)
+    //     .map(|x| Vec2::new((x as f32).exp().sin(), (x as f32).exp().cos()))
+    //     .collect::<Vec<Vec2>>();
 
     let adder_kernel = ("adder", vec![0, 1]);
     let step_particles_kernel = ("step_particles", vec![2, 3]);

@@ -1,4 +1,4 @@
-use crate::error::{ChimeraError, Result};
+use crate::error::{ChimeraError, CrateResult};
 use std::sync::Arc;
 
 use vulkano::{
@@ -7,7 +7,7 @@ use vulkano::{
     VulkanLibrary,
 };
 
-pub fn compute_capable_device_and_queue() -> Result<(String, Arc<Device>, Arc<Queue>)> {
+pub fn compute_capable_device_and_queue() -> CrateResult<(String, Arc<Device>, Arc<Queue>)> {
     // 1. Load the Vulkan library
     let library = VulkanLibrary::new()?;
 

@@ -89,4 +89,4 @@ impl From<Box<dyn std::error::Error>> for ChimeraError {
 }
 
 /// Convenience type alias for Results with [`ChimeraError`]
-pub type Result<T> = std::result::Result<T, ChimeraError>;
+pub type CrateResult<T> = std::result::Result<T, ChimeraError>;

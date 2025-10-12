@@ -6,7 +6,7 @@ use vulkano::{
     pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
 };
 
-use crate::error::Result;
+use crate::error::CrateResult;
 
 /// Bind the descriptor set and dispatch the compute shader
 /// This is basically like:
@@ -18,7 +18,7 @@ pub fn bind_and_dispatch(
     pipeline: Arc<ComputePipeline>,
     descriptor_set: Arc<DescriptorSet>,
     num_wg: u32,
-) -> Result<()> {
+) -> CrateResult<()> {
     builder.bind_descriptor_sets(
         PipelineBindPoint::Compute,
         pipeline.layout().clone(),

@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::CrateResult;
 use std::sync::Arc;
 
 use vulkano::{
@@ -18,7 +18,7 @@ pub fn build_pipeline(
     device: Arc<Device>,
     descriptor_set_layout: Arc<DescriptorSetLayout>,
     entry_point: EntryPoint,
-) -> Result<Arc<ComputePipeline>> {
+) -> CrateResult<Arc<ComputePipeline>> {
     // Pipeline layout + push constants
     let pipeline_layout = PipelineLayout::new(
         device.clone(),
