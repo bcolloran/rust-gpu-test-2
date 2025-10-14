@@ -93,70 +93,70 @@ impl VulkanoRunner {
         })
     }
 
-    pub fn run_compute_shader_sequence(
-        &self,
-        a: &mut [u32],
-        b: &[u32],
-        c: &[u32],
-        d: &[u32],
-        x: &mut [Vec2],
-        v: &[Vec2],
-    ) -> CrateResult<()> {
-        assert_eq!(a.len(), b.len());
-        // Allocate a CPU visible buffer, copy input, run compute, read back
-        let len = a.len();
-        let num_workgroups = (len as u32).div_ceil(WORKGROUP_SIZE);
+    // pub fn run_compute_shader_sequence(
+    //     &self,
+    //     a: &mut [u32],
+    //     b: &[u32],
+    //     c: &[u32],
+    //     d: &[u32],
+    //     x: &mut [Vec2],
+    //     v: &[Vec2],
+    // ) -> CrateResult<()> {
+    //     assert_eq!(a.len(), b.len());
+    //     // Allocate a CPU visible buffer, copy input, run compute, read back
+    //     let len = a.len();
+    //     let num_workgroups = (len as u32).div_ceil(WORKGROUP_SIZE);
 
-        let alloc = self.memory_allocator.clone();
-        let buffer_a = build_and_fill_buffer(alloc.clone(), a)?;
-        let buffer_b = build_and_fill_buffer(alloc.clone(), b)?;
-        let buffer_c = build_and_fill_buffer(alloc.clone(), c)?;
-        let buffer_d = build_and_fill_buffer(alloc.clone(), d)?;
-        let buffer_x = build_and_fill_buffer(alloc.clone(), x)?;
-        let buffer_v = build_and_fill_buffer(alloc.clone(), v)?;
+    //     let alloc = self.memory_allocator.clone();
+    //     let buffer_a = build_and_fill_buffer(alloc.clone(), a)?;
+    //     let buffer_b = build_and_fill_buffer(alloc.clone(), b)?;
+    //     let buffer_c = build_and_fill_buffer(alloc.clone(), c)?;
+    //     let buffer_d = build_and_fill_buffer(alloc.clone(), d)?;
+    //     let buffer_x = build_and_fill_buffer(alloc.clone(), x)?;
+    //     let buffer_v = build_and_fill_buffer(alloc.clone(), v)?;
 
-        let buffers = BufNameToBufferAny(HashMap::from([
-            ("a".to_string(), buffer_a.into()),
-            ("b".to_string(), buffer_b.into()),
-            ("c".to_string(), buffer_c.into()),
-            ("d".to_string(), buffer_d.into()),
-            ("x".to_string(), buffer_x.into()),
-            ("v".to_string(), buffer_v.into()),
-        ]));
+    //     let buffers = BufNameToBufferAny(HashMap::from([
+    //         ("a".to_string(), buffer_a.into()),
+    //         ("b".to_string(), buffer_b.into()),
+    //         ("c".to_string(), buffer_c.into()),
+    //         ("d".to_string(), buffer_d.into()),
+    //         ("x".to_string(), buffer_x.into()),
+    //         ("v".to_string(), buffer_v.into()),
+    //     ]));
 
-        let compute_pipelines_with_desc_sets = self
-            .compute_pipelines
-            .with_descriptor_sets(self.descriptor_set_allocator.clone(), &buffers)?;
+    //     let compute_pipelines_with_desc_sets = self
+    //         .compute_pipelines
+    //         .with_descriptor_sets(self.descriptor_set_allocator.clone(), &buffers)?;
 
-        // Build command buffer
-        let mut builder = AutoCommandBufferBuilder::primary(
-            self.command_buffer_allocator.clone(),
-            self.queue.queue_family_index(),
-            CommandBufferUsage::OneTimeSubmit,
-        )?;
+    //     // Build command buffer
+    //     let mut builder = AutoCommandBufferBuilder::primary(
+    //         self.command_buffer_allocator.clone(),
+    //         self.queue.queue_family_index(),
+    //         CommandBufferUsage::OneTimeSubmit,
+    //     )?;
 
-        compute_pipelines_with_desc_sets
-            .bind_and_dispatch_all(&mut builder, num_workgroups)
-            .inspect_err(|e| println!("Error during bind_and_dispatch_all: {e}"))?;
+    //     compute_pipelines_with_desc_sets
+    //         .bind_and_dispatch_all(&mut builder, num_workgroups)
+    //         .inspect_err(|e| println!("Error during bind_and_dispatch_all: {e}"))?;
 
-        println!("  Dispatching compute on device '{}'", self.device_name);
+    //     println!("  Dispatching compute on device '{}'", self.device_name);
 
-        let command_buffer = builder.build()?;
+    //     let command_buffer = builder.build()?;
 
-        // Execute + wait
-        let future = sync::now(self.device.clone())
-            .then_execute(self.queue.clone(), command_buffer)?
-            .then_signal_fence_and_flush()?;
-        future.wait(None)?;
+    //     // Execute + wait
+    //     let future = sync::now(self.device.clone())
+    //         .then_execute(self.queue.clone(), command_buffer)?
+    //         .then_signal_fence_and_flush()?;
+    //     future.wait(None)?;
 
-        // Read back results (buffer is host visible)
-        let content = &buffers.0["a"].read_u32()[..len];
+    //     // Read back results (buffer is host visible)
+    //     let content = &buffers.0["a"].read_u32()[..len];
 
-        a.copy_from_slice(&content);
-        x.copy_from_slice(&buffers.0["x"].read_vec2()[..len]);
+    //     a.copy_from_slice(&content);
+    //     x.copy_from_slice(&buffers.0["x"].read_vec2()[..len]);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     /// Run compute shaders and return the x buffer for graphics rendering
     ///
