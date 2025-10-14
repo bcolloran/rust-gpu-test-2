@@ -12,7 +12,7 @@ use core::fmt::{self, Display};
 
 /// Workgroup size for compute shaders
 /// IMPORTANT: This must be kept in sync with the literal value in kernel/src/lib.rs
-pub const WORKGROUP_SIZE: u32 = 256;
+pub const WORKGROUP_SIZE: u32 = 64;
 
 /// The constant used in the computation (index * 2 + COMPUTE_CONSTANT)
 pub const COMPUTE_CONSTANT: u32 = 42;

@@ -1898,6 +1898,7 @@ name = "shaders"
 version = "0.0.0"
 dependencies = [
  "rayon",
+ "shared",
  "spirv-builder",
  "spirv-std",
 ]

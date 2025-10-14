@@ -16,6 +16,7 @@ crate-type = ["cdylib", "rlib"]
 ## optionally branch/rev/tag). Cargo will clone the repo and then pick the crate named
 ## `spirv-std` from that workspace automatically. You must NOT combine `git` and `path`.
 spirv-std = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main" }
+shared = { path = "../shared" }
 
 [build-dependencies]
 spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main" }
