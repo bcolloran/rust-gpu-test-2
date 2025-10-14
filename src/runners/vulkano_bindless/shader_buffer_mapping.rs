@@ -1,8 +1,22 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-};
+/// Shader buffer mapping for bindless compute pipelines
+///
+/// This module handles the creation and management of compute pipelines that use
+/// the bindless paradigm. Unlike the traditional approach where each buffer gets
+/// its own descriptor binding, here we use:
+/// - 2 descriptor bindings total (one for all u32 data, one for all Vec2 data)
+/// - Push constants to pass buffer offsets to shaders
+/// - The same pipeline can be reused for different buffer combinations by just
+///   changing push constants
 
+use crate::{
+    error::CrateResult,
+    runners::vulkano::shader_buffer_mapping::ComputePassInvocationInfo,
+    runners::vulkano_bindless::{
+        descriptor_sets, pipeline::build_pipeline, shader::shader_entry_point,
+        unified_buffer::UnifiedBufferTracker,
+    },
+};
+use std::sync::Arc;
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
     descriptor_set::{
@@ -14,343 +28,230 @@ use vulkano::{
         DescriptorSet, WriteDescriptorSet,
     },
     device::Device,
-    pipeline::ComputePipeline,
-    shader::{EntryPoint, ShaderModule, ShaderStages},
+    pipeline::{ComputePipeline, Pipeline},
+    shader::ShaderStages,
 };
 
-use crate::{
-    error::CrateResult,
-    runners::vulkano::{
-        buffer::BufNameToBufferAny, dispatch::bind_and_dispatch, pipeline::build_pipeline,
-        shader::shader_entry_point,
-    },
-};
-
-#[derive(Clone)]
-pub struct ShaderInvocationTemplate {
-    pub invocation_name: String,
-    pub entry_point_name: String,
-    pub buf_names: Vec<String>,
-    pub binding_nums_in_shader: Vec<u32>,
+/// Information about a single shader dispatch in the bindless paradigm
+#[allow(dead_code)]
+struct BindlessShaderDispatch {
+    /// Name of this invocation (e.g., "adder_ab", "step_particles_0")
+    invocation_name: String,
+    /// Name of the shader entry point (e.g., "adder", "step_particles")
+    entry_point_name: String,
+    /// Names of the logical buffers this shader accesses (e.g., ["a", "b"] or ["x", "v"])
+    buffer_names: Vec<String>,
+    /// The compute pipeline for this shader
+    pipeline: Arc<ComputePipeline>,
 }
 
-impl ShaderInvocationTemplate {
-    pub fn with_entry_point(&self, entry_point: EntryPoint) -> ShaderPipelineHasEntry {
-        ShaderPipelineHasEntry {
-            invocation_name: self.invocation_name.clone(),
-            entry_point_name: self.entry_point_name.clone(),
-            buf_names: self.buf_names.clone(),
-            binding_nums_in_shader: self.binding_nums_in_shader.clone(),
-            entry_point,
-        }
-    }
+/// A complete bindless compute pass with all necessary pipelines and descriptor sets
+pub struct BindlessComputePass {
+    /// The compute pipelines for each shader invocation
+    dispatches: Vec<BindlessShaderDispatch>,
+    /// Descriptor set containing both unified buffers (binding 0 = u32, binding 1 = Vec2)
+    descriptor_set: Arc<DescriptorSet>,
 }
 
-#[derive(Clone)]
-pub struct ShaderPipelineHasEntry {
-    pub invocation_name: String,
-    pub entry_point_name: String,
-    pub buf_names: Vec<String>,
-    pub binding_nums_in_shader: Vec<u32>,
-    pub entry_point: EntryPoint,
-}
-
-impl ShaderPipelineHasEntry {
-    pub fn with_descriptor_set_layout(
-        &self,
-        layout: Arc<DescriptorSetLayout>,
-    ) -> ShaderPipelineHasDescriptorSetLayout {
-        ShaderPipelineHasDescriptorSetLayout {
-            invocation_name: self.invocation_name.clone(),
-            entry_point_name: self.entry_point_name.clone(),
-            buf_names: self.buf_names.clone(),
-            binding_nums_in_shader: self.binding_nums_in_shader.clone(),
-            entry_point: self.entry_point.clone(),
-            descriptor_set_layout: layout.clone(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ShaderPipelineHasDescriptorSetLayout {
-    pub invocation_name: String,
-    pub entry_point_name: String,
-    pub buf_names: Vec<String>,
-    pub binding_nums_in_shader: Vec<u32>,
-    pub entry_point: EntryPoint,
-    pub descriptor_set_layout: Arc<DescriptorSetLayout>,
-}
-
-impl ShaderPipelineHasDescriptorSetLayout {
-    pub fn with_pipeline(&self, pipeline: Arc<ComputePipeline>) -> ShaderPipelineHasPipeline {
-        ShaderPipelineHasPipeline {
-            invocation_name: self.invocation_name.clone(),
-            entry_point_name: self.entry_point_name.clone(),
-            buf_names: self.buf_names.clone(),
-            binding_nums_in_shader: self.binding_nums_in_shader.clone(),
-            entry_point: self.entry_point.clone(),
-            descriptor_set_layout: self.descriptor_set_layout.clone(),
-            pipeline,
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct ShaderPipelineHasPipeline {
-    pub invocation_name: String,
-    pub entry_point_name: String,
-    pub buf_names: Vec<String>,
-    pub binding_nums_in_shader: Vec<u32>,
-    pub entry_point: EntryPoint,
-    pub descriptor_set_layout: Arc<DescriptorSetLayout>,
-    pub pipeline: Arc<ComputePipeline>,
-}
-
-impl ShaderPipelineHasPipeline {
-    pub fn with_descriptor_set(
-        &self,
-        descriptor_set: Arc<DescriptorSet>,
-    ) -> ShaderPipelineHasConcreteDescriptorSet {
-        ShaderPipelineHasConcreteDescriptorSet {
-            invocation_name: self.invocation_name.clone(),
-            entry_point_name: self.entry_point_name.clone(),
-            buf_names: self.buf_names.clone(),
-            binding_nums_in_shader: self.binding_nums_in_shader.clone(),
-            entry_point: self.entry_point.clone(),
-            descriptor_set_layout: self.descriptor_set_layout.clone(),
-            pipeline: self.pipeline.clone(),
-            descriptor_set,
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct ShaderPipelineHasConcreteDescriptorSet {
-    pub invocation_name: String,
-    pub entry_point_name: String,
-    pub buf_names: Vec<String>,
-    pub binding_nums_in_shader: Vec<u32>,
-    pub entry_point: EntryPoint,
-    pub descriptor_set_layout: Arc<DescriptorSetLayout>,
-    pub pipeline: Arc<ComputePipeline>,
-    pub descriptor_set: Arc<DescriptorSet>,
-}
-
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-
-#[derive(Clone)]
-pub struct ComputePassInvocationInfo {
-    pub pipelines: Vec<ShaderInvocationTemplate>,
-}
-
-impl ComputePassInvocationInfo {
-    pub fn from_lists(lists: Vec<(&str, Vec<&str>, (&str, Vec<u32>))>) -> Self {
-        let mut invocations = HashSet::new();
-
-        ComputePassInvocationInfo {
-            pipelines: lists
-                .iter()
-                .map(
-                    |(invoke_name, list, (entry_name, binding_nums_in_shader))| {
-                        if !invocations.insert(invoke_name.to_string()) {
-                            panic!(
-                                "Duplicate invocation name in shader buffer mapping: {invoke_name}"
-                            );
-                        };
-
-                        ShaderInvocationTemplate {
-                            invocation_name: invoke_name.to_string(),
-                            entry_point_name: entry_name.to_string(),
-                            buf_names: list.iter().map(|s| s.to_string()).collect(),
-                            binding_nums_in_shader: binding_nums_in_shader.clone(),
-                        }
-                    },
-                )
-                .collect(),
-        }
-    }
-
-    pub fn with_entry_points(
-        &self,
-        shader_module: Arc<ShaderModule>,
-    ) -> ShaderPipelineInfosWithEntry {
-        ShaderPipelineInfosWithEntry {
-            pipelines: self
-                .pipelines
-                .iter()
-                .map(|template| {
-                    let entry_point =
-                        shader_entry_point(shader_module.clone(), &template.entry_point_name)
-                            .unwrap_or_else(|e| {
-                                panic!(
-                                    "Failed to get entry point '{}': {e}",
-                                    template.entry_point_name
-                                );
-                            });
-                    template.with_entry_point(entry_point)
-                })
-                .collect(),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct ShaderPipelineInfosWithEntry {
-    pub pipelines: Vec<ShaderPipelineHasEntry>,
-}
-impl ShaderPipelineInfosWithEntry {
-    pub fn with_descriptor_sets(
-        &self,
+impl BindlessComputePass {
+    /// Create a new bindless compute pass
+    ///
+    /// This function:
+    /// 1. Creates a shader module with bindless entry points
+    /// 2. Creates descriptor set layouts for the unified buffers
+    /// 3. Creates compute pipelines for each shader
+    /// 4. Creates descriptor sets that bind the unified buffers
+    pub fn new(
         device: Arc<Device>,
-    ) -> CrateResult<ShaderPipelineInfosWithDescriptorSetLayouts> {
-        let mut pipelines = Vec::new();
-
-        for pipeline_info in self.pipelines.iter() {
-            // println!(
-            //     "Processing pipeline invocation '{}', entry point '{}'",
-            //     pipeline_info.invocation_name, pipeline_info.entry_point_name
-            // );
-            let mut bindings = BTreeMap::new();
-
-            for (_buf_name, shader_binding_num) in pipeline_info
-                .buf_names
-                .clone()
-                .iter()
-                .zip(pipeline_info.binding_nums_in_shader.clone().iter())
-            {
-                let mut binding_desc =
-                    DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
-                binding_desc.stages = ShaderStages::COMPUTE;
-                binding_desc.descriptor_count = 1;
-
-                // println!(
-                //     "   Buffer name '{}' mapped to binding {}",
-                //     buf_name, shader_binding_num
-                // );
-                bindings.insert(*shader_binding_num, binding_desc);
-            }
-
-            let layout = DescriptorSetLayout::new(
-                device.clone(),
-                DescriptorSetLayoutCreateInfo {
-                    bindings,
-                    ..Default::default()
-                },
-            )?;
-            pipelines.push(pipeline_info.with_descriptor_set_layout(layout.clone()));
-        }
-
-        Ok(ShaderPipelineInfosWithDescriptorSetLayouts { pipelines })
-    }
-}
-
-#[derive(Clone)]
-pub struct ShaderPipelineInfosWithDescriptorSetLayouts {
-    pub pipelines: Vec<ShaderPipelineHasDescriptorSetLayout>,
-}
-impl ShaderPipelineInfosWithDescriptorSetLayouts {
-    pub fn with_pipelines(
-        &self,
-        device: Arc<Device>,
-    ) -> CrateResult<ShaderPipelineInfosWithComputePipelines> {
-        let new_pipelines = self
-            .pipelines
-            .iter()
-            .map(|pipeline_info| {
-                let pipeline = build_pipeline(
-                    device.clone(),
-                    pipeline_info.descriptor_set_layout.clone(),
-                    pipeline_info.entry_point.clone(),
-                )
-                .inspect_err(|e| {
-                    println!(
-                        "Error during build_pipeline for entry point {:?}: {e}",
-                        pipeline_info
-                    );
-                })?;
-                Ok(pipeline_info.with_pipeline(pipeline))
-            })
-            .collect::<CrateResult<Vec<_>>>()?;
-        Ok(ShaderPipelineInfosWithComputePipelines {
-            pipelines: new_pipelines,
-        })
-    }
-}
-
-#[derive(Clone)]
-pub struct ShaderPipelineInfosWithComputePipelines {
-    pub pipelines: Vec<ShaderPipelineHasPipeline>,
-}
-
-impl ShaderPipelineInfosWithComputePipelines {
-    pub fn with_descriptor_sets(
-        &self,
+        compute_pass_info: &ComputePassInvocationInfo,
         descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
-        buf_any_map: &BufNameToBufferAny,
-    ) -> CrateResult<ShaderPipelineInfosWithDescriptorSets> {
-        let new_pipelines = self
-            .pipelines
-            .iter()
-            .map(|pipeline_info| {
-                let write_descriptor_sets: Vec<WriteDescriptorSet> = pipeline_info
-                    .buf_names
-                    .iter()
-                    .zip(pipeline_info.binding_nums_in_shader.iter())
-                    .map(|(buf_name, binding_num)| {
-                        if !buf_any_map.0.contains_key(buf_name) {
-                            panic!("Buffer name '{}' not found in provided buffers", buf_name);
-                        }
-                        let buf_any = &buf_any_map.0[buf_name];
+        unified_buffers: &UnifiedBufferTracker,
+    ) -> CrateResult<Self> {
+        // Create shader module
+        let shader_module =
+            crate::runners::vulkano_bindless::shader::shader_module(device.clone())?;
+        println!("Bindless shader module created");
 
-                        buf_any.write_descriptor_set_for_binding(*binding_num)
-                    })
-                    .collect();
+        // Create descriptor set layouts for the two bindings
+        // Binding 0: unified u32 buffer
+        // Binding 1: unified Vec2 buffer
+        let descriptor_set_layout = create_bindless_descriptor_set_layout(device.clone())?;
+        println!("Bindless descriptor set layouts created");
 
-                let descriptor_set =
-                    crate::runners::vulkano::descriptor_sets::build_concrete_descriptor_set(
-                        descriptor_set_allocator.clone(),
-                        pipeline_info.descriptor_set_layout.clone(),
-                        write_descriptor_sets.clone(),
-                    )?;
+        // Create a single descriptor set that binds both unified buffers
+        // The descriptor set layout has 2 bindings:
+        // - Binding 0: unified u32 buffer
+        // - Binding 1: unified Vec2 buffer
+        let descriptor_set = descriptor_sets::build_concrete_descriptor_set(
+            descriptor_set_allocator.clone(),
+            descriptor_set_layout.clone(),
+            vec![
+                WriteDescriptorSet::buffer(0, unified_buffers.unified_u32_buffer.clone()),
+                WriteDescriptorSet::buffer(1, unified_buffers.unified_vec2_buffer.clone()),
+            ],
+        )?;
 
-                Ok(pipeline_info.with_descriptor_set(descriptor_set))
-            })
-            .collect::<CrateResult<Vec<_>>>()?;
-        Ok(ShaderPipelineInfosWithDescriptorSets {
-            pipelines: new_pipelines,
+        // Create pipelines for each shader invocation
+        let mut dispatches = Vec::new();
+
+        for pipeline_info in &compute_pass_info.pipelines {
+            // Get the shader entry point (e.g., "bindless::adder")
+            let entry_point =
+                shader_entry_point(shader_module.clone(), &pipeline_info.entry_point_name)?;
+
+            // Build the compute pipeline
+            let pipeline =
+                build_pipeline(device.clone(), descriptor_set_layout.clone(), entry_point)?;
+
+            dispatches.push(BindlessShaderDispatch {
+                invocation_name: pipeline_info.invocation_name.clone(),
+                entry_point_name: pipeline_info.entry_point_name.clone(),
+                buffer_names: pipeline_info.buf_names.clone(),
+                pipeline,
+            });
+        }
+
+        println!(
+            "Bindless pipelines created: {} dispatches",
+            dispatches.len()
+        );
+
+        Ok(Self {
+            dispatches,
+            descriptor_set,
         })
     }
-}
 
-#[derive(Clone)]
-pub struct ShaderPipelineInfosWithDescriptorSets {
-    pub pipelines: Vec<ShaderPipelineHasConcreteDescriptorSet>,
-}
-
-impl ShaderPipelineInfosWithDescriptorSets {
-    pub fn bind_and_dispatch_all(
+    /// Dispatch all compute shaders in the pass
+    ///
+    /// For each shader invocation:
+    /// 1. Bind the appropriate pipeline
+    /// 2. Bind descriptor sets (always the same ones - the unified buffers)
+    /// 3. Set push constants with buffer offsets
+    /// 4. Dispatch the compute shader
+    pub fn dispatch_all(
         &self,
         builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-        num_wg: u32,
+        num_workgroups: u32,
+        unified_buffers: &UnifiedBufferTracker,
     ) -> CrateResult<()> {
-        for pipeline_info in self.pipelines.iter() {
-            builder.bind_pipeline_compute(pipeline_info.pipeline.clone())?;
-            bind_and_dispatch(
-                builder,
-                pipeline_info.pipeline.clone(),
-                pipeline_info.descriptor_set.clone(),
-                num_wg,
+        use vulkano::pipeline::PipelineBindPoint;
+
+        for dispatch in &self.dispatches {
+            // Bind the pipeline for this shader
+            builder.bind_pipeline_compute(dispatch.pipeline.clone())?;
+
+            // Bind the descriptor set (same for all shaders - contains both unified buffers)
+            // The shader will access the appropriate binding (0 for u32, 1 for Vec2) based on
+            // what it was compiled to use
+            builder.bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                dispatch.pipeline.layout().clone(),
+                0,
+                self.descriptor_set.clone(),
             )?;
+
+            // Calculate push constants (buffer offsets) for this dispatch
+            let push_constants = calculate_push_constants(dispatch, unified_buffers)?;
+
+            // Set push constants
+            builder.push_constants(dispatch.pipeline.layout().clone(), 0, push_constants)?;
+
+            // Dispatch the compute shader
+            unsafe {
+                builder.dispatch([num_workgroups, 1, 1])?;
+            }
         }
+
         Ok(())
     }
+}
+
+/// Create the descriptor set layout for bindless rendering
+///
+/// This layout has only 2 bindings:
+/// - Binding 0: Storage buffer for all u32 data
+/// - Binding 1: Storage buffer for all Vec2 data
+fn create_bindless_descriptor_set_layout(
+    device: Arc<Device>,
+) -> CrateResult<Arc<DescriptorSetLayout>> {
+    let mut bindings = std::collections::BTreeMap::new();
+
+    // Binding 0: unified u32 buffer
+    let mut binding_0 = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
+    binding_0.stages = ShaderStages::COMPUTE;
+    binding_0.descriptor_count = 1;
+    bindings.insert(0, binding_0);
+
+    // Binding 1: unified Vec2 buffer
+    let mut binding_1 = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
+    binding_1.stages = ShaderStages::COMPUTE;
+    binding_1.descriptor_count = 1;
+    bindings.insert(1, binding_1);
+
+    Ok(DescriptorSetLayout::new(
+        device,
+        DescriptorSetLayoutCreateInfo {
+            bindings,
+            ..Default::default()
+        },
+    )?)
+}
+
+/// Push constants structure matching what the shaders expect
+/// Must match the layout in shaders/src/bindless.rs
+#[derive(Clone, Copy, vulkano::buffer::BufferContents)]
+#[repr(C)]
+struct PushConstants {
+    offset_0: u32,
+    offset_1: u32,
+    buffer_size: u32,
+    _padding: u32,
+}
+
+/// Calculate push constants for a shader dispatch
+///
+/// Push constants contain the offsets where each logical buffer starts within
+/// the unified buffer. The format depends on which shader we're calling:
+/// - adder: [a_offset, b_offset]
+/// - step_particles: [x_offset, v_offset]
+/// - wrap_particles: [x_offset, 0 (unused)]
+fn calculate_push_constants(
+    dispatch: &BindlessShaderDispatch,
+    unified_buffers: &UnifiedBufferTracker,
+) -> CrateResult<PushConstants> {
+    // Determine the offsets based on which buffers this shader uses
+    let offsets: Vec<u32> = dispatch
+        .buffer_names
+        .iter()
+        .map(|name| {
+            // Try u32 buffers first
+            if let Some(&offset) = unified_buffers.u32_offsets.get(name) {
+                return offset;
+            }
+            // Then try Vec2 buffers
+            if let Some(&offset) = unified_buffers.vec2_offsets.get(name) {
+                return offset;
+            }
+            // If buffer not found, panic (this is a programmer error)
+            panic!(
+                "Buffer '{}' not found in unified buffers for dispatch '{}'",
+                name, dispatch.invocation_name
+            );
+        })
+        .collect();
+
+    // Create push constants struct
+    // If there's only one offset (like wrap_particles), pad with 0
+    let offset_0 = offsets.get(0).copied().unwrap_or(0);
+    let offset_1 = offsets.get(1).copied().unwrap_or(0);
+
+
+
+    Ok(PushConstants {
+        offset_0,
+        offset_1,
+        buffer_size: unified_buffers.logical_buffer_size as u32,
+        _padding: 0,
+    })
 }

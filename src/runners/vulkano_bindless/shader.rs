@@ -7,6 +7,10 @@ use vulkano::{
     shader::{EntryPoint, ShaderModule},
 };
 
+/// Create a shader module containing the bindless shader variants
+///
+/// This uses the same SPIR-V binary as the regular shaders, but we'll
+/// reference the "bindless::" prefixed entry points (bindless::adder, bindless::step_particles, etc.)
 pub fn shader_module(device: Arc<Device>) -> CrateResult<Arc<ShaderModule>> {
     // Create shader module from embedded SPIR-V
     let kernel_bytes = crate::OTHER_SHADERS_SPIRV;
@@ -33,9 +37,15 @@ pub fn shader_entry_point(
     shader_module: Arc<ShaderModule>,
     entry_point_name: &str,
 ) -> CrateResult<EntryPoint> {
-    Ok(shader_module.entry_point(entry_point_name).ok_or_else(|| {
-        ChimeraError::Other(format!(
-            "Entry point '{entry_point_name}' not found in SPIR-V"
-        ))
-    })?)
+    // For bindless shaders, we prepend "bindless::" to the entry point name
+    let bindless_entry_name = format!("bindless::{}", entry_point_name);
+
+    Ok(shader_module
+        .entry_point(&bindless_entry_name)
+        .ok_or_else(|| {
+            ChimeraError::Other(format!(
+                "Entry point '{}' not found in SPIR-V",
+                bindless_entry_name
+            ))
+        })?)
 }

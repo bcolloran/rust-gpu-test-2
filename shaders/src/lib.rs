@@ -10,6 +10,7 @@ use spirv_std::{
     spirv,
 };
 
+pub mod bindless;
 pub mod mult;
 
 fn add_update<T: Add + AddAssign>(a: &mut T, b: T) {

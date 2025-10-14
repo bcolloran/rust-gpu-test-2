@@ -5,20 +5,21 @@ pub mod dispatch;
 pub mod pipeline;
 pub mod shader;
 pub mod shader_buffer_mapping;
+pub mod unified_buffer;
 
 use crate::{
     error::CrateResult,
     runners::vulkano::{
-        buffer::{build_and_fill_buffer, BufNameToBufferAny},
         device::compute_capable_device_and_queue,
-        shader_buffer_mapping::{
-            ComputePassInvocationInfo, ShaderPipelineInfosWithComputePipelines,
-        },
+        shader_buffer_mapping::ComputePassInvocationInfo,
     },
 };
+use self::shader_buffer_mapping::BindlessComputePass;
+use self::unified_buffer::UnifiedBufferTracker;
+
 use glam::Vec2;
 use shared::WORKGROUP_SIZE;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use vulkano::{
     buffer::Subbuffer,
@@ -32,60 +33,56 @@ use vulkano::{
     sync::{self, GpuFuture},
 };
 
-/// Vulkan-based runner for bitonic sort using vulkano safe abstractions
+/// Vulkan-based runner for compute shaders using a bindless approach
+///
+/// Unlike the traditional "bindfull" approach where each logical buffer gets its own
+/// descriptor binding, this runner uses a bindless approach where:
+/// - All u32 data is packed into one unified buffer
+/// - All Vec2 data is packed into another unified buffer  
+/// - Shaders use push constants to know where each logical buffer starts
+/// - Only 2 descriptor bindings are needed total (vs 6+ in the bindfull approach)
 pub struct VulkanoBindlessRunner {
     instance: Arc<Instance>,
     device: Arc<Device>,
     queue: Arc<Queue>,
-    compute_pipelines: ShaderPipelineInfosWithComputePipelines,
+    /// Information about the compute pass (shader entry points, buffer mappings, etc.)
+    compute_pass_info: ComputePassInvocationInfo,
     memory_allocator: Arc<StandardMemoryAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
-
     device_name: String,
 }
 
 impl VulkanoBindlessRunner {
-    /// Create a new Vulkano runner
-    pub fn new(entry_point_names_to_buffers: ComputePassInvocationInfo) -> CrateResult<Self> {
+    /// Create a new bindless Vulkano runner
+    ///
+    /// Unlike the traditional runner which creates descriptor sets and pipelines
+    /// during initialization, the bindless runner defers most of that work until
+    /// the actual compute call. This is because:
+    /// 1. We don't know buffer sizes/data until run_compute_and_get_buffer is called
+    /// 2. The bindless approach creates unified buffers from the actual data
+    /// 3. Pipelines and descriptor sets are simpler (only 2 bindings) so recreating isn't expensive
+    pub fn new(compute_pass_info: ComputePassInvocationInfo) -> CrateResult<Self> {
         let (instance, device_name, device, queue) = compute_capable_device_and_queue()?;
         println!("Using device: {}", device_name);
 
-        let shader_module = shader::shader_module(device.clone())?;
-        println!("Shader module created");
-
-        //   allocators
+        // Create allocators
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-
         let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
             device.clone(),
             Default::default(),
         ));
-
         let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
             device.clone(),
             Default::default(),
         ));
 
-        println!("Allocators created");
-
-        let shader_bufs_and_entries =
-            entry_point_names_to_buffers.with_entry_points(shader_module.clone());
-
-        println!("Shader entry points created");
-
-        let descriptor_set_layouts =
-            shader_bufs_and_entries.with_descriptor_sets(device.clone())?;
-        println!("Descriptor set layouts created");
-
-        let compute_pipelines = descriptor_set_layouts.with_pipelines(device.clone())?;
-
-        println!("VulkanoRunner::new ok");
+        println!("VulkanoBindlessRunner::new ok");
         Ok(Self {
             instance,
             device,
             queue,
-            compute_pipelines,
+            compute_pass_info,
             memory_allocator,
             descriptor_set_allocator,
             command_buffer_allocator,
@@ -93,11 +90,18 @@ impl VulkanoBindlessRunner {
         })
     }
 
-    /// Run compute shaders and return the x buffer for graphics rendering
+    /// Run compute shaders using the bindless approach and return the x buffer for graphics rendering
     ///
-    /// This is similar to run_compute_shader_sequence but returns the GPU buffer
-    /// instead of copying data back to CPU. This allows the graphics pipeline to
-    /// directly read from the same buffer that the compute shaders wrote to.
+    /// This method implements the bindless paradigm:
+    /// 1. Creates unified buffers (one for all u32 data, one for all Vec2 data)
+    /// 2. Builds compute pipelines with only 2 descriptor bindings
+    /// 3. Uses push constants to tell shaders where each logical buffer is located
+    /// 4. Executes the compute pass
+    /// 5. Reads back results from the unified buffers
+    ///
+    /// The key difference from the bindfull approach is that we only bind 2 descriptor
+    /// sets total (one for u32 buffer, one for Vec2 buffer), and use push constants
+    /// to specify offsets for each dispatch.
     pub fn run_compute_and_get_buffer(
         &self,
         a: &mut [u32],
@@ -111,55 +115,70 @@ impl VulkanoBindlessRunner {
         let len = a.len();
         let num_workgroups = (len as u32).div_ceil(WORKGROUP_SIZE);
 
-        let alloc = self.memory_allocator.clone();
-        let buffer_a = build_and_fill_buffer(alloc.clone(), a)?;
-        let buffer_b = build_and_fill_buffer(alloc.clone(), b)?;
-        let buffer_c = build_and_fill_buffer(alloc.clone(), c)?;
-        let buffer_d = build_and_fill_buffer(alloc.clone(), d)?;
-        let buffer_x = build_and_fill_buffer(alloc.clone(), x)?;
-        let buffer_v = build_and_fill_buffer(alloc.clone(), v)?;
+        // BINDLESS STEP 1: Create unified buffers
+        // Instead of 6 separate buffers, we create 2 unified buffers
+        let unified_buffers = UnifiedBufferTracker::new(
+            self.memory_allocator.clone(),
+            a,
+            b,
+            c,
+            d,
+            x,
+            v,
+        )?;
 
-        let buffers = BufNameToBufferAny(HashMap::from([
-            ("a".to_string(), buffer_a.into()),
-            ("b".to_string(), buffer_b.into()),
-            ("c".to_string(), buffer_c.into()),
-            ("d".to_string(), buffer_d.into()),
-            ("x".to_string(), buffer_x.clone().into()),
-            ("v".to_string(), buffer_v.into()),
-        ]));
 
-        let compute_pipelines_with_desc_sets = self
-            .compute_pipelines
-            .with_descriptor_sets(self.descriptor_set_allocator.clone(), &buffers)?;
 
+        // BINDLESS STEP 2: Create the compute pass with bindless pipelines
+        // This will create pipelines that expect unified buffers and push constants
+        let compute_pass = BindlessComputePass::new(
+            self.device.clone(),
+            &self.compute_pass_info,
+            self.descriptor_set_allocator.clone(),
+            &unified_buffers,
+        )?;
+
+        // BINDLESS STEP 3: Build command buffer and dispatch shaders
         let mut builder = AutoCommandBufferBuilder::primary(
             self.command_buffer_allocator.clone(),
             self.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )?;
 
-        compute_pipelines_with_desc_sets
-            .bind_and_dispatch_all(&mut builder, num_workgroups)
-            .inspect_err(|e| println!("Error during bind_and_dispatch_all: {e}"))?;
+        // Execute all the compute shader dispatches
+        // Each dispatch will use push constants to specify buffer offsets
+        compute_pass
+            .dispatch_all(&mut builder, num_workgroups, &unified_buffers)
+            .inspect_err(|e| println!("Error during dispatch_all: {e}"))?;
 
         println!("  Dispatching compute on device '{}'", self.device_name);
 
         let command_buffer = builder.build()?;
 
+        // BINDLESS STEP 4: Execute on GPU
         let future = sync::now(self.device.clone())
             .then_execute(self.queue.clone(), command_buffer)?
             .then_signal_fence_and_flush()?;
         future.wait(None)?;
 
-        // Read back 'a' buffer to host memory
-        let content = &buffers.0["a"].read_u32()[..len];
-        a.copy_from_slice(&content);
+        // BINDLESS STEP 5: Read back results from unified buffers
+        // Extract the logical buffers from the unified buffers
+        let a_result = unified_buffers.read_u32_buffer("a");
+        a.copy_from_slice(&a_result);
 
-        // Also read x buffer to update the host copy
-        x.copy_from_slice(&buffers.0["x"].read_vec2()[..len]);
+        let x_result = unified_buffers.read_vec2_buffer("x");
+        x.copy_from_slice(&x_result);
 
-        // Return the x buffer for graphics rendering
-        Ok((buffer_x, len))
+        // For graphics rendering, we need to return a buffer containing just 'x'.
+        // Since x is part of the unified buffer, we need to extract it.
+        // For simplicity, we'll create a new buffer with just x data.
+        // (In a real application, you might want to keep using the unified buffer with offsets)
+        let x_standalone = crate::runners::vulkano::buffer::build_and_fill_buffer(
+            self.memory_allocator.clone(),
+            &x_result,
+        )?;
+
+        Ok((x_standalone, len))
     }
 
     /// Get the Vulkan instance (needed for creating windows/surfaces)
