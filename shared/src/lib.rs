@@ -9,6 +9,11 @@ pub struct RowA {
 
 use bytemuck::{Pod, Zeroable};
 use core::fmt::{self, Display};
+use core::ops::{Add, AddAssign};
+
+pub fn add_update<T: Add + AddAssign>(a: &mut T, b: T) {
+    *a += b
+}
 
 /// Workgroup size for compute shaders
 /// IMPORTANT: This must be kept in sync with the literal value in kernel/src/lib.rs

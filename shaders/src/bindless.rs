@@ -4,7 +4,6 @@ use spirv_std::{
     spirv,
 };
 
-// use crate::add_update;
 // ==============================================================================
 // BINDLESS COMPUTE SHADERS
 // ==============================================================================
@@ -73,13 +72,15 @@ pub fn adder(
     // This is crucial because we dispatch with a fixed workgroup size (64 threads),
     // but the actual data may be smaller (e.g., 8 elements)
     if i < buffer_size {
-        // SAFETY: We have already checked that i is within buffer_size,
+        // // directly adding the elt at `b_offset` to the one at `a_offset` works:
+        // unified_u32_buffer[a_offset + i] += unified_u32_buffer[b_offset + i];
+
+        // but trying to do it via a helper function fails:
         // let [a, b] =
         //     unsafe { unified_u32_buffer.get_disjoint_unchecked_mut([a_offset + i, b_offset + i]) };
-
-        // *a += *b;
-        // add_update(a, *b);
-        unified_u32_buffer[a_offset + i] += unified_u32_buffer[b_offset + i];
+        let b = unified_u32_buffer[b_offset + i];
+        let a = &mut unified_u32_buffer[a_offset + i];
+        shared::add_update(a, b);
     }
 }
 

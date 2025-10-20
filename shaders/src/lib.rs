@@ -1,8 +1,6 @@
 #![cfg_attr(target_arch = "spirv", no_std)]
 // HACK(eddyb) can't easily see warnings otherwise from `spirv-builder` builds.
-#![deny(warnings)]
-
-use core::ops::{Add, AddAssign};
+// #![deny(warnings)]
 
 use glam::UVec3;
 use spirv_std::{
@@ -13,10 +11,6 @@ use spirv_std::{
 pub mod bindless;
 pub mod mult;
 
-fn add_update<T: Add + AddAssign>(a: &mut T, b: T) {
-    *a += b
-}
-
 #[spirv(compute(threads(64)))]
 pub fn adder(
     #[spirv(global_invocation_id)] id: UVec3,
@@ -24,7 +18,7 @@ pub fn adder(
     #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] b: &[u32],
 ) {
     let i = id.x as usize;
-    add_update(&mut a[i], b[i]);
+    shared::add_update(&mut a[i], b[i]);
 }
 
 #[spirv(compute(threads(64)))]
@@ -34,7 +28,7 @@ pub fn step_particles(
     #[spirv(storage_buffer, descriptor_set = 0, binding = 3)] v: &[Vec2],
 ) {
     let i = id.x as usize;
-    add_update(&mut x[i], v[i]);
+    shared::add_update(&mut x[i], v[i]);
 }
 
 #[spirv(compute(threads(64)))]
