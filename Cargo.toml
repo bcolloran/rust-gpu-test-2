@@ -13,31 +13,37 @@ default = ["vulkan", "vulkano"]
 vulkan = ["spirv-builder"]
 vulkano = ["vulkan", "dep:vulkano"]
 
+[workspace.dependencies]
+bytemuck = { version = "1.14", features = ["derive"] }
+glam = { version = "0.30.8", default-features = false, features = [
+  "bytemuck",
+  "nostd-libm",
+] }
+spirv-std = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main", features = [
+  "bytemuck",
+] }
+
+
 [dependencies]
+
+bytemuck = { workspace = true }
+glam = { workspace = true }
+spirv-std = { workspace = true }
 # Shared dependencies
 shared = { path = "shared" }
 
-glam = { version = "0.24", features = ["bytemuck"] }
-bytemuck = { version = "1.14" }
+
+# glam = { version = "0.30.8", features = ["bytemuck"] }
+# bytemuck = { version = "1.14" }
 num_cpus = "1.16"
 parking_lot = "0.12"
 rayon = "1.8"
 rand = "0.8"
-smallvec = "1.15.1"
-facet = "0.29.1"
 
-# Vulkan dependencies (wgpu)
-# wgpu = { version = "26.0", features = [
-#   "spirv",
-#   "vulkan-portability",
-# ], optional = true }
+
 pollster = { version = "0.3", optional = true }
 futures = { version = "0.3", optional = true }
 
-# Vulkan dependencies (ash)
-# ash = { version = "0.38", optional = true }
-# ash-window = { version = "0.12", optional = true }
-# raw-window-handle = { version = "0.6", optional = true }
 
 # Vulkan dependencies (vulkano)
 vulkano = { version = "0.35.2", optional = true }

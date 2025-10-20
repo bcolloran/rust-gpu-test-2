@@ -1,6 +1,7 @@
 //! Shared types for the compute demos
-
 #![no_std]
+
+pub mod grid;
 
 pub struct RowA {
     pub x: u32,

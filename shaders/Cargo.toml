@@ -12,14 +12,12 @@ crate-type = ["cdylib", "rlib"]
 
 
 [dependencies]
-## To depend on a crate that lives inside a Git workspace, you only need the git URL (and
-## optionally branch/rev/tag). Cargo will clone the repo and then pick the crate named
-## `spirv-std` from that workspace automatically. You must NOT combine `git` and `path`.
-spirv-std = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main" }
+bytemuck = { workspace = true }
+# glam = { workspace = true }
+spirv-std = { workspace = true }
+
 shared = { path = "../shared" }
+
 
 [build-dependencies]
 spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main" }
-
-[target.'cfg(not(target_arch = "spirv"))'.dependencies]
-rayon = "1.5"

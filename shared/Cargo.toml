@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bytemuck = { version = "1.14", features = ["derive"] }
+bytemuck = { workspace = true }
+# glam = { workspace = true }
+spirv-std = { workspace = true }
+
 
 [lints]
 workspace = true
