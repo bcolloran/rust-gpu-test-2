@@ -10,6 +10,9 @@ use vulkano::{
 /// Error types for the Rust GPU Chimera demo
 #[derive(Error, Debug)]
 pub enum ChimeraError {
+    #[error("DescriptorSetNameNotFound: {0}")]
+    DescriptorSetNameNotFound(String),
+
     #[error("Environment variable error: {0}")]
     VarError(#[from] std::env::VarError),
 

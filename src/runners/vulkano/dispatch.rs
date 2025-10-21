@@ -17,7 +17,7 @@ pub fn bind_and_dispatch(
     builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
     pipeline: Arc<ComputePipeline>,
     descriptor_set: Arc<DescriptorSet>,
-    num_wg: u32,
+    num_wg: [u32; 3],
 ) -> CrateResult<()> {
     builder.bind_descriptor_sets(
         PipelineBindPoint::Compute,
@@ -26,7 +26,7 @@ pub fn bind_and_dispatch(
         descriptor_set,
     )?;
     unsafe {
-        builder.dispatch([num_wg, 1, 1])?;
+        builder.dispatch(num_wg)?;
     }
     Ok(())
 }

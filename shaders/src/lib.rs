@@ -42,10 +42,6 @@ pub fn wrap_particles(
     x[i] = x[i] % Vec2::splat(1.0);
 }
 
-// fn rand_u32(a: u32, b: u32, shift: u32) -> u32 {
-//     (a ^ (a >> 16)).wrapping_mul(0x85EB_CA6B) ^ ((b + shift) ^ (b >> 16)).wrapping_mul(0x85EB_CA6B)
-// }
-
 #[inline]
 pub fn wang32(mut x: u32) -> u32 {
     x = x.wrapping_add(!x << 15);

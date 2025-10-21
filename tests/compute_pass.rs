@@ -7,9 +7,11 @@
 //
 // The tests verify that all buffers are correctly modified after the pass.
 
+use bytemuck::Zeroable;
 use glam::Vec2;
 use rust_gpu_chimera_demo::runners::vulkano::shader_buffer_mapping::ComputePassInvocationInfo;
 use rust_gpu_chimera_demo::runners::vulkano::VulkanoRunner;
+use shared::grid::GridCell;
 
 /// Create a VulkanoRunner with the full compute pass configuration
 /// This matches the configuration used in main.rs
@@ -61,6 +63,9 @@ fn test_compute_pass_basic() {
     let mut x = vec![Vec2::new(0.5, 0.5); 8];
     let v = vec![Vec2::new(0.1, 0.1); 8];
 
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
+
     // Expected results:
     // a = 1 + 10 + 100 + 1000 = 1111
     let expected_a = vec![1111u32; 8];
@@ -70,7 +75,7 @@ fn test_compute_pass_basic() {
     let expected_x = vec![Vec2::new(0.9, 0.9); 8];
 
     // Run the compute pass
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed: {:?}", result.err());
 
     // Verify buffer a
@@ -105,11 +110,14 @@ fn test_compute_pass_wrapping() {
     let mut x = vec![Vec2::new(0.95, 0.95); 8];
     let v = vec![Vec2::new(0.05, 0.05); 8];
 
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
+
     // x = 0.95 + 4 * 0.05 = 1.15
     // After wrap: x % 1.0 = 0.15
     let expected_x = vec![Vec2::new(0.15, 0.15); 8];
 
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed: {:?}", result.err());
 
     // Verify wrapping occurred correctly
@@ -137,11 +145,14 @@ fn test_compute_pass_multiple_wraps() {
     let mut x = vec![Vec2::new(0.5, 0.5); 8];
     let v = vec![Vec2::new(0.3, 0.4); 8];
 
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
+
     // x.x = 0.5 + 4 * 0.3 = 1.7, wrapped = 0.7
     // x.y = 0.5 + 4 * 0.4 = 2.1, wrapped = 0.1 (wraps twice)
     let expected_x = vec![Vec2::new(0.7, 0.1); 8];
 
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed: {:?}", result.err());
 
     for (i, (actual, expected)) in x.iter().zip(expected_x.iter()).enumerate() {
@@ -188,7 +199,8 @@ fn test_compute_pass_varied_data() {
         Vec2::new(0.07, 0.08),
         Vec2::new(0.08, 0.09),
     ];
-
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
     // Calculate expected x values
     let expected_x: Vec<Vec2> = x
         .iter()
@@ -199,7 +211,7 @@ fn test_compute_pass_varied_data() {
         })
         .collect();
 
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed: {:?}", result.err());
 
     // Verify buffer a
@@ -233,11 +245,14 @@ fn test_compute_pass_negative_velocities() {
     let mut x = vec![Vec2::new(0.5, 0.5); 8];
     let v = vec![Vec2::new(-0.05, -0.1); 8];
 
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
+
     // x = 0.5 + 4 * (-0.05, -0.1) = (0.3, 0.1)
     // After wrap: (0.3, 0.1) - both positive, no wrapping needed
     let expected_x = vec![Vec2::new(0.3, 0.1); 8];
 
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed: {:?}", result.err());
 
     for (i, (actual, expected)) in x.iter().zip(expected_x.iter()).enumerate() {
@@ -269,11 +284,14 @@ fn test_compute_pass_large_buffer() {
     let mut x = vec![Vec2::new(0.0, 0.0); n];
     let v = vec![Vec2::new(0.25, 0.25); n];
 
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
+
     // x = 0 + 4 * 0.25 = 1.0
     // After wrap: 1.0 % 1.0 = 0.0
     let expected_x = vec![Vec2::new(0.0, 0.0); n];
 
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed: {:?}", result.err());
 
     assert_eq!(&a, &expected_a, "Buffer a incorrect for large buffer");
@@ -301,7 +319,10 @@ fn test_compute_pass_returns_buffer() {
     let mut x = vec![Vec2::new(0.5, 0.5); 8];
     let v = vec![Vec2::new(0.0, 0.0); 8];
 
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
+
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed");
 
     // Verify that the function returns the buffer and correct length
@@ -327,10 +348,13 @@ fn test_compute_pass_zero_input() {
     let mut x = vec![Vec2::ZERO; 8];
     let v = vec![Vec2::ZERO; 8];
 
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
+
     let expected_a = vec![0u32; 8];
     let expected_x = vec![Vec2::ZERO; 8];
 
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed with zero input");
 
     assert_eq!(a, expected_a, "Buffer a incorrect for zero input");
@@ -353,7 +377,10 @@ fn test_compute_pass_max_values() {
     let mut x = vec![Vec2::new(0.5, 0.5); 8];
     let v = vec![Vec2::new(0.0, 0.0); 8];
 
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
+
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed with max values");
 
     assert_eq!(a, expected_a, "Buffer a incorrect with overflow");
@@ -363,7 +390,7 @@ fn test_compute_pass_max_values() {
 fn test_compute_pass_spiral_pattern() {
     let runner = create_full_compute_pass_runner();
 
-    let n = 16;
+    let n = 256;
 
     let mut a = vec![0u32; n];
     let b = vec![0u32; n];
@@ -385,7 +412,8 @@ fn test_compute_pass_spiral_pattern() {
             Vec2::new(0.01 * angle.cos(), 0.01 * angle.sin())
         })
         .collect();
-
+    let n = 256;
+    let mut g = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
     // Calculate expected values
     let expected_x: Vec<Vec2> = x
         .iter()
@@ -396,7 +424,7 @@ fn test_compute_pass_spiral_pattern() {
         })
         .collect();
 
-    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v);
+    let result = runner.run_compute_and_get_buffer(&mut a, &b, &c, &d, &mut x, &v, &mut g);
     assert!(result.is_ok(), "Compute pass failed with spiral pattern");
 
     // Verify the spiral pattern was computed correctly

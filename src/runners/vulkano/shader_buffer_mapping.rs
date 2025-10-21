@@ -348,7 +348,7 @@ impl ShaderPipelineInfosWithDescriptorSets {
                 builder,
                 pipeline_info.pipeline.clone(),
                 pipeline_info.descriptor_set.clone(),
-                num_wg,
+                [num_wg, 1, 1],
             )?;
         }
         Ok(())

@@ -1,19 +1,23 @@
 pub mod buffer;
+pub mod buffer_specs;
 pub mod descriptor_sets;
 pub mod device;
 pub mod dispatch;
 pub mod pipeline;
 pub mod shader;
 pub mod shader_buffer_mapping;
+pub mod shader_pipeline_builder;
 
 use crate::{
     error::CrateResult,
     runners::vulkano::{
         buffer::{build_and_fill_buffer, BufNameToBufferAny},
+        buffer_specs::{DescriptorSetByName, IntoDescriptorSetByName},
         device::compute_capable_device_and_queue,
         shader_buffer_mapping::{
             ComputePassInvocationInfo, ShaderPipelineInfosWithComputePipelines,
         },
+        shader_pipeline_builder::{InitialSpec, ShaderPipelineBuilder},
     },
 };
 use glam::Vec2;
@@ -37,6 +41,7 @@ pub struct VulkanoRunner {
     instance: Arc<Instance>,
     device: Arc<Device>,
     queue: Arc<Queue>,
+    shader_module: Arc<vulkano::shader::ShaderModule>,
     compute_pipelines: ShaderPipelineInfosWithComputePipelines,
     memory_allocator: Arc<StandardMemoryAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
@@ -90,6 +95,7 @@ impl VulkanoRunner {
             descriptor_set_allocator,
             command_buffer_allocator,
             device_name,
+            shader_module,
         })
     }
 
@@ -229,6 +235,42 @@ impl VulkanoRunner {
 
         // Return the x buffer for graphics rendering
         Ok((buffer_x, len))
+    }
+
+    pub fn run_compute_and_get_buffer_2<T: IntoDescriptorSetByName>(
+        &self,
+        buffer_specs: &T,
+        pipeline_specs: Vec<ShaderPipelineBuilder<InitialSpec>>,
+    ) -> CrateResult<()> {
+        let buffer_specs_for_gpu = buffer_specs.with_gpu_buffer(self.memory_allocator.clone())?;
+
+        let mut builder = AutoCommandBufferBuilder::primary(
+            self.command_buffer_allocator.clone(),
+            self.queue.queue_family_index(),
+            CommandBufferUsage::OneTimeSubmit,
+        )?;
+
+        for spec in pipeline_specs.iter() {
+            let pipeline = spec
+                .clone()
+                .with_entry_point(self.shader_module.clone())?
+                .with_descriptor_set_layout(self.device.clone())?
+                .with_pipeline(self.device.clone())?
+                .with_descriptor_set(
+                    &buffer_specs_for_gpu,
+                    self.descriptor_set_allocator.clone(),
+                )?;
+            pipeline.bind_and_dispatch(&mut builder)?;
+        }
+
+        let command_buffer = builder.build()?;
+
+        let future = sync::now(self.device.clone())
+            .then_execute(self.queue.clone(), command_buffer)?
+            .then_signal_fence_and_flush()?;
+        future.wait(None)?;
+
+        Ok(())
     }
 
     /// Get the Vulkan instance (needed for creating windows/surfaces)
