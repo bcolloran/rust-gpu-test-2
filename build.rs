@@ -15,6 +15,7 @@ fn build_spirv_kernel() {
     let kernels_path = PathBuf::from(manifest_dir).join("shaders");
 
     let result = SpirvBuilder::new(kernels_path, "spirv-unknown-vulkan1.4")
+        .scalar_block_layout(true)
         .print_metadata(spirv_builder::MetadataPrintout::Full)
         .build()
         .unwrap();

@@ -5,7 +5,7 @@ use spirv_std::glam::Vec2;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub struct Cell {
+pub struct GridCell {
     #[zeroable]
     pub mass: f32,
     #[zeroable]

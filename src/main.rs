@@ -3,16 +3,14 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use bytemuck::Zeroable;
 use glam::Vec2;
 use rust_gpu_chimera_demo::{
-    graphics::GraphicsRenderer,
-    runners::vulkano::shader_buffer_mapping::ComputePassInvocationInfo,
+    graphics::GraphicsRenderer, runners::vulkano::shader_buffer_mapping::ComputePassInvocationInfo,
     *,
 };
-use vulkano::{
-    shader::ShaderModule,
-    swapchain::Surface,
-};
+use shared::grid::GridCell;
+use vulkano::{shader::ShaderModule, swapchain::Surface};
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -25,7 +23,7 @@ struct App {
     window: Option<Arc<Window>>,
     renderer: Option<GraphicsRenderer>,
     runner: Option<VulkanoRunner>,
-    
+
     // Particle data
     a: Vec<u32>,
     b: Vec<u32>,
@@ -33,12 +31,22 @@ struct App {
     d: Vec<u32>,
     x: Vec<Vec2>,
     v: Vec<Vec2>,
-    
+    g: Vec<GridCell>,
+
     frame_count: usize,
 }
 
 impl App {
-    fn new(runner: VulkanoRunner, a: Vec<u32>, b: Vec<u32>, c: Vec<u32>, d: Vec<u32>, x: Vec<Vec2>, v: Vec<Vec2>) -> Self {
+    fn new(
+        runner: VulkanoRunner,
+        a: Vec<u32>,
+        b: Vec<u32>,
+        c: Vec<u32>,
+        d: Vec<u32>,
+        x: Vec<Vec2>,
+        v: Vec<Vec2>,
+        g: Vec<GridCell>,
+    ) -> Self {
         Self {
             window: None,
             renderer: None,
@@ -49,6 +57,7 @@ impl App {
             d,
             x,
             v,
+            g,
             frame_count: 0,
         }
     }
@@ -66,9 +75,9 @@ impl ApplicationHandler for App {
                 .create_window(
                     Window::default_attributes()
                         .with_title("Rust GPU - Compute + Graphics Demo")
-                        .with_inner_size(winit::dpi::LogicalSize::new(800, 600))
+                        .with_inner_size(winit::dpi::LogicalSize::new(800, 600)),
                 )
-                .unwrap()
+                .unwrap(),
         );
 
         // Use the instance from the compute runner (shared instance/device)
@@ -83,8 +92,9 @@ impl ApplicationHandler for App {
         let shader_module = unsafe {
             ShaderModule::new(
                 self.runner.as_ref().unwrap().device().clone(),
-                vulkano::shader::ShaderModuleCreateInfo::new(&spirv_words)
-            ).unwrap()
+                vulkano::shader::ShaderModuleCreateInfo::new(&spirv_words),
+            )
+            .unwrap()
         };
 
         // Create graphics renderer using the compute device and queue
@@ -96,7 +106,8 @@ impl ApplicationHandler for App {
             surface.clone(),
             shader_module.clone(),
             shader_module.clone(),
-        ).unwrap();
+        )
+        .unwrap();
 
         println!("\n✓ Setup complete! Starting render loop...\n");
         println!("Controls:");
@@ -107,12 +118,25 @@ impl ApplicationHandler for App {
         // Run compute once initially
         println!("Running initial compute pass...");
         let runner = self.runner.as_ref().unwrap();
-        let (buffer_x, num_particles) = runner.run_compute_and_get_buffer(
-            &mut self.a, &self.b, &self.c, &self.d, &mut self.x, &self.v
-        ).unwrap();
-        
-        println!("Particles after compute: {:?}", &self.x[..5.min(self.x.len())]);
-        renderer.set_position_buffer(buffer_x, num_particles).unwrap();
+        let (buffer_x, num_particles) = runner
+            .run_compute_and_get_buffer(
+                &mut self.a,
+                &self.b,
+                &self.c,
+                &self.d,
+                &mut self.x,
+                &self.v,
+                &mut self.g,
+            )
+            .unwrap();
+
+        println!(
+            "Particles after compute: {:?}",
+            &self.x[..5.min(self.x.len())]
+        );
+        renderer
+            .set_position_buffer(buffer_x, num_particles)
+            .unwrap();
 
         self.window = Some(window);
         self.renderer = Some(renderer);
@@ -133,7 +157,10 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => {
-                println!("\nWindow closed. Total frames rendered: {}", self.frame_count);
+                println!(
+                    "\nWindow closed. Total frames rendered: {}",
+                    self.frame_count
+                );
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
@@ -146,7 +173,13 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 // Run compute shader to update particle positions
                 match runner.run_compute_and_get_buffer(
-                    &mut self.a, &self.b, &self.c, &self.d, &mut self.x, &self.v
+                    &mut self.a,
+                    &self.b,
+                    &self.c,
+                    &self.d,
+                    &mut self.x,
+                    &self.v,
+                    &mut self.g,
                 ) {
                     Ok((buffer_x, num_particles)) => {
                         if let Err(e) = renderer.set_position_buffer(buffer_x, num_particles) {
@@ -164,10 +197,13 @@ impl ApplicationHandler for App {
                 }
 
                 self.frame_count += 1;
-                
+
                 // Print progress every 60 frames
                 if self.frame_count % 60 == 0 {
                     println!("Frame {}: particle 0 at {:?}", self.frame_count, self.x[0]);
+                    let g_slice = &self.g[0..3];
+
+                    println!("GridCell buffer contents:\n   {:?}", g_slice)
                 }
 
                 // Request next frame
@@ -185,6 +221,7 @@ fn main() -> Result<()> {
     let adder_kernel = ("adder", vec![0, 1]);
     let step_particles_kernel = ("step_particles", vec![2, 3]);
     let wrap_particles_kernel = ("wrap_particles", vec![2]);
+    let fill_grid_random_kernel = ("fill_grid_random", vec![4]);
 
     let shader_buffers = ComputePassInvocationInfo::from_lists(vec![
         ("adder_ab", vec!["a", "b"], adder_kernel.clone()),
@@ -211,6 +248,11 @@ fn main() -> Result<()> {
             step_particles_kernel.clone(),
         ),
         ("wrap_particles", vec!["x"], wrap_particles_kernel.clone()),
+        (
+            "fill_grid_random",
+            vec!["grid"],
+            fill_grid_random_kernel.clone(),
+        ),
     ]);
 
     // Initialize particle data
@@ -227,10 +269,7 @@ fn main() -> Result<()> {
         .map(|i| {
             let angle = (i as f32) * std::f32::consts::PI * 2.0 / n as f32;
             let radius = 0.3 + 0.2 * (i as f32 / n as f32);
-            Vec2::new(
-                0.5 + radius * angle.cos(),
-                0.5 + radius * angle.sin(),
-            )
+            Vec2::new(0.5 + radius * angle.cos(), 0.5 + radius * angle.sin())
         })
         .collect::<Vec<Vec2>>();
 
@@ -238,12 +277,11 @@ fn main() -> Result<()> {
     let v = (0..n as u32)
         .map(|i| {
             let angle = (i as f32) * std::f32::consts::PI * 2.0 / n as f32;
-            Vec2::new(
-                0.001 * angle.cos(),
-                0.001 * angle.sin(),
-            )
+            Vec2::new(0.001 * angle.cos(), 0.001 * angle.sin())
         })
         .collect::<Vec<Vec2>>();
+
+    let grid = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
 
     println!("Created {} particles", n);
 
@@ -253,7 +291,7 @@ fn main() -> Result<()> {
     println!("Compute runner initialized!");
 
     // Create application state
-    let mut app = App::new(runner, a, b, c, d, x, v);
+    let mut app = App::new(runner, a, b, c, d, x, v, grid);
 
     // Create event loop and run
     let event_loop = EventLoop::new()?;

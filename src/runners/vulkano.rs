@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use glam::Vec2;
-use shared::WORKGROUP_SIZE;
+use shared::{grid::GridCell, WORKGROUP_SIZE};
 use std::{collections::HashMap, sync::Arc};
 
 use vulkano::{
@@ -171,6 +171,7 @@ impl VulkanoRunner {
         d: &[u32],
         x: &mut [Vec2],
         v: &[Vec2],
+        g: &mut [GridCell],
     ) -> CrateResult<(Subbuffer<[Vec2]>, usize)> {
         assert_eq!(a.len(), b.len());
         let len = a.len();
@@ -183,6 +184,7 @@ impl VulkanoRunner {
         let buffer_d = build_and_fill_buffer(alloc.clone(), d)?;
         let buffer_x = build_and_fill_buffer(alloc.clone(), x)?;
         let buffer_v = build_and_fill_buffer(alloc.clone(), v)?;
+        let buffer_g = build_and_fill_buffer(alloc.clone(), g)?;
 
         let buffers = BufNameToBufferAny(HashMap::from([
             ("a".to_string(), buffer_a.into()),
@@ -191,6 +193,7 @@ impl VulkanoRunner {
             ("d".to_string(), buffer_d.into()),
             ("x".to_string(), buffer_x.clone().into()),
             ("v".to_string(), buffer_v.into()),
+            ("grid".to_string(), buffer_g.clone().into()),
         ]));
 
         let compute_pipelines_with_desc_sets = self
@@ -207,7 +210,7 @@ impl VulkanoRunner {
             .bind_and_dispatch_all(&mut builder, num_workgroups)
             .inspect_err(|e| println!("Error during bind_and_dispatch_all: {e}"))?;
 
-        println!("  Dispatching compute on device '{}'", self.device_name);
+        // println!("  Dispatching compute on device '{}'", self.device_name);
 
         let command_buffer = builder.build()?;
 
@@ -222,6 +225,7 @@ impl VulkanoRunner {
 
         // Also read x buffer to update the host copy
         x.copy_from_slice(&buffers.0["x"].read_vec2()[..len]);
+        g.copy_from_slice(&buffers.0["grid"].read_grid_cell()[..(len * len)]);
 
         // Return the x buffer for graphics rendering
         Ok((buffer_x, len))

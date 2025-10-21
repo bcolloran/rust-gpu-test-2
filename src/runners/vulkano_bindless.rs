@@ -7,18 +7,18 @@ pub mod shader;
 pub mod shader_buffer_mapping;
 pub mod unified_buffer;
 
+use self::shader_buffer_mapping::BindlessComputePass;
+use self::unified_buffer::UnifiedBufferTracker;
 use crate::{
     error::CrateResult,
     runners::vulkano::{
-        device::compute_capable_device_and_queue,
-        shader_buffer_mapping::ComputePassInvocationInfo,
+        device::compute_capable_device_and_queue, shader_buffer_mapping::ComputePassInvocationInfo,
     },
 };
-use self::shader_buffer_mapping::BindlessComputePass;
-use self::unified_buffer::UnifiedBufferTracker;
 
 use glam::Vec2;
-use shared::WORKGROUP_SIZE;
+use shared::{GRID_WORKGROUP_SIZE, WORKGROUP_SIZE};
+
 use std::sync::Arc;
 
 use vulkano::{
@@ -117,17 +117,8 @@ impl VulkanoBindlessRunner {
 
         // BINDLESS STEP 1: Create unified buffers
         // Instead of 6 separate buffers, we create 2 unified buffers
-        let unified_buffers = UnifiedBufferTracker::new(
-            self.memory_allocator.clone(),
-            a,
-            b,
-            c,
-            d,
-            x,
-            v,
-        )?;
-
-
+        let unified_buffers =
+            UnifiedBufferTracker::new(self.memory_allocator.clone(), a, b, c, d, x, v)?;
 
         // BINDLESS STEP 2: Create the compute pass with bindless pipelines
         // This will create pipelines that expect unified buffers and push constants
@@ -151,7 +142,7 @@ impl VulkanoBindlessRunner {
             .dispatch_all(&mut builder, num_workgroups, &unified_buffers)
             .inspect_err(|e| println!("Error during dispatch_all: {e}"))?;
 
-        println!("  Dispatching compute on device '{}'", self.device_name);
+        // println!("  Dispatching compute on device '{}'", self.device_name);
 
         let command_buffer = builder.build()?;
 

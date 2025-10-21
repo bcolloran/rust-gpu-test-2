@@ -2,6 +2,7 @@ use crate::error::CrateResult;
 use std::{collections::HashMap, ops::Index, sync::Arc};
 
 use glam::Vec2;
+use shared::grid::GridCell;
 use vulkano::{
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
     descriptor_set::WriteDescriptorSet,
@@ -9,71 +10,88 @@ use vulkano::{
 };
 
 #[allow(non_camel_case_types)]
-pub enum BufferAny {
+pub enum BufferKindsEnum {
     u32(Subbuffer<[u32]>),
     f32(Subbuffer<[f32]>),
     Vec2(Subbuffer<[Vec2]>),
+    GridCell(Subbuffer<[GridCell]>),
 }
 
-impl From<Subbuffer<[u32]>> for BufferAny {
+impl From<Subbuffer<[u32]>> for BufferKindsEnum {
     fn from(buf: Subbuffer<[u32]>) -> Self {
-        BufferAny::u32(buf)
+        BufferKindsEnum::u32(buf)
     }
 }
-impl From<Subbuffer<[f32]>> for BufferAny {
+impl From<Subbuffer<[f32]>> for BufferKindsEnum {
     fn from(buf: Subbuffer<[f32]>) -> Self {
-        BufferAny::f32(buf)
+        BufferKindsEnum::f32(buf)
     }
 }
-impl From<Subbuffer<[Vec2]>> for BufferAny {
+impl From<Subbuffer<[Vec2]>> for BufferKindsEnum {
     fn from(buf: Subbuffer<[Vec2]>) -> Self {
-        BufferAny::Vec2(buf)
+        BufferKindsEnum::Vec2(buf)
+    }
+}
+impl From<Subbuffer<[GridCell]>> for BufferKindsEnum {
+    fn from(buf: Subbuffer<[GridCell]>) -> Self {
+        BufferKindsEnum::GridCell(buf)
     }
 }
 
-impl TryInto<Subbuffer<[u32]>> for BufferAny {
+impl TryInto<Subbuffer<[u32]>> for BufferKindsEnum {
     type Error = String;
 
     fn try_into(self) -> std::result::Result<Subbuffer<[u32]>, Self::Error> {
         match self {
-            BufferAny::u32(buf) => Ok(buf),
+            BufferKindsEnum::u32(buf) => Ok(buf),
             _ => Err("BufferAny is not of type u32".to_string()),
         }
     }
 }
-impl TryInto<Subbuffer<[f32]>> for BufferAny {
+impl TryInto<Subbuffer<[f32]>> for BufferKindsEnum {
     type Error = String;
 
     fn try_into(self) -> std::result::Result<Subbuffer<[f32]>, Self::Error> {
         match self {
-            BufferAny::f32(buf) => Ok(buf),
+            BufferKindsEnum::f32(buf) => Ok(buf),
             _ => Err("BufferAny is not of type f32".to_string()),
         }
     }
 }
-impl TryInto<Subbuffer<[Vec2]>> for BufferAny {
+impl TryInto<Subbuffer<[Vec2]>> for BufferKindsEnum {
     type Error = String;
 
     fn try_into(self) -> std::result::Result<Subbuffer<[Vec2]>, Self::Error> {
         match self {
-            BufferAny::Vec2(buf) => Ok(buf),
+            BufferKindsEnum::Vec2(buf) => Ok(buf),
             _ => Err("BufferAny is not of type Vec2".to_string()),
         }
     }
 }
+impl TryInto<Subbuffer<[GridCell]>> for BufferKindsEnum {
+    type Error = String;
 
-impl BufferAny {
+    fn try_into(self) -> std::result::Result<Subbuffer<[GridCell]>, Self::Error> {
+        match self {
+            BufferKindsEnum::GridCell(buf) => Ok(buf),
+            _ => Err("BufferAny is not of type GridCell".to_string()),
+        }
+    }
+}
+
+impl BufferKindsEnum {
     pub fn write_descriptor_set_for_binding(&self, binding: u32) -> WriteDescriptorSet {
         match self {
-            BufferAny::u32(buf) => WriteDescriptorSet::buffer(binding, buf.clone()),
-            BufferAny::f32(buf) => WriteDescriptorSet::buffer(binding, buf.clone()),
-            BufferAny::Vec2(buf) => WriteDescriptorSet::buffer(binding, buf.clone()),
+            BufferKindsEnum::u32(buf) => WriteDescriptorSet::buffer(binding, buf.clone()),
+            BufferKindsEnum::f32(buf) => WriteDescriptorSet::buffer(binding, buf.clone()),
+            BufferKindsEnum::Vec2(buf) => WriteDescriptorSet::buffer(binding, buf.clone()),
+            BufferKindsEnum::GridCell(buf) => WriteDescriptorSet::buffer(binding, buf.clone()),
         }
     }
 
     pub fn read_u32(&self) -> Vec<u32> {
         match self {
-            BufferAny::u32(buf) => {
+            BufferKindsEnum::u32(buf) => {
                 let content = buf.read().expect("failed to read buffer");
                 content.to_vec()
             }
@@ -82,7 +100,7 @@ impl BufferAny {
     }
     pub fn read_f32(&self) -> Vec<f32> {
         match self {
-            BufferAny::f32(buf) => {
+            BufferKindsEnum::f32(buf) => {
                 let content = buf.read().expect("failed to read buffer");
                 content.to_vec()
             }
@@ -91,16 +109,25 @@ impl BufferAny {
     }
     pub fn read_vec2(&self) -> Vec<Vec2> {
         match self {
-            BufferAny::Vec2(buf) => {
+            BufferKindsEnum::Vec2(buf) => {
                 let content = buf.read().expect("failed to read buffer");
                 content.to_vec()
             }
             _ => panic!("BufferAny is not of type Vec2"),
         }
     }
+    pub fn read_grid_cell(&self) -> Vec<GridCell> {
+        match self {
+            BufferKindsEnum::GridCell(buf) => {
+                let content = buf.read().expect("failed to read buffer");
+                content.to_vec()
+            }
+            _ => panic!("BufferAny is not of type GridCell"),
+        }
+    }
 }
 
-pub struct BufNameToBufferAny(pub HashMap<String, BufferAny>);
+pub struct BufNameToBufferAny(pub HashMap<String, BufferKindsEnum>);
 
 #[derive(Clone)]
 pub struct BufNameToBinding(pub HashMap<String, u32>);

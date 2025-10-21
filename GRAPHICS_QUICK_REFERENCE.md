@@ -115,7 +115,7 @@ pub fn run_compute_and_get_buffer(
     &self,
     a: &mut [u32], b: &[u32], c: &[u32], d: &[u32],
     x: &mut [Vec2], v: &[Vec2],
-) -> CrateResult<(Subbuffer<[Vec2]>, usize)>
+) -> CrateResult<(Subbuffer<[Vec2]>, Subbuffer<[GridCell]>, usize)>
 
 // Get the device (for creating graphics resources)
 pub fn device(&self) -> &Arc<Device>
