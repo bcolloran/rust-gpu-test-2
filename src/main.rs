@@ -218,15 +218,26 @@ fn main() -> Result<()> {
 
     let mut grid = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
 
+    let buf_specs = (
+        buf_spec("a", 0, &mut a),
+        buf_spec("b", 1, &mut b),
+        buf_spec("c", 2, &mut c),
+        buf_spec("d", 3, &mut d),
+        buf_spec("x", 2, &mut x),
+        buf_spec("v", 3, &mut v),
+        buf_spec("grid", 4, &mut grid),
+    );
+
     let wg_1d = num_workgroups_1d(n as u32);
     let wg_2d = num_workgroups_2d(n as u32, n as u32);
+
     // Setup compute shader configuration
     let adder_kernel = kernel("adder", vec![0, 1], wg_1d);
     let step_particles_kernel = kernel("step_particles", vec![2, 3], wg_1d);
     let wrap_particles_kernel = kernel("wrap_particles", vec![2], wg_1d);
     let fill_grid_random_kernel = kernel("fill_grid_random", vec![4], wg_2d);
 
-    let invocation_specs = vec![
+    let invocation_chain = vec![
         invoc_spec("adder_ab", vec!["a", "b"], adder_kernel.clone()),
         invoc_spec(
             "step_particles_0",
@@ -256,19 +267,9 @@ fn main() -> Result<()> {
         ),
     ];
 
-    let buf_specs = (
-        buf_spec("a", 0, &mut a),
-        buf_spec("b", 1, &mut b),
-        buf_spec("c", 2, &mut c),
-        buf_spec("d", 3, &mut d),
-        buf_spec("x", 2, &mut x),
-        buf_spec("v", 3, &mut v),
-        buf_spec("grid", 4, &mut grid),
-    );
-
     // Create compute runner
     println!("Initializing Vulkan compute...");
-    let compute_chain = VulkanoComputeChain::new(&buf_specs, invocation_specs)?;
+    let compute_chain = VulkanoComputeChain::new(&buf_specs, invocation_chain)?;
     println!("Compute runner initialized!");
 
     // Create application state
