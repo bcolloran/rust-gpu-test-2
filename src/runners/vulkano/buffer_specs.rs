@@ -30,7 +30,6 @@ pub fn buf_spec<'a, T>(
 pub struct SubbufferAndBindingSpec<T> {
     pub name: &'static str,
     pub binding: u32,
-    // pub data: &'a mut [T],
     pub sub_buf: Subbuffer<[T]>,
 }
 

@@ -36,11 +36,9 @@ where
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
 
-    // buffer_specs: BS,
     gpu_buffer_specs: <BS as IntoDescriptorSetByName>::Out,
     pipeline_specs: Vec<ShaderPipelineSpec>,
 
-    //
     command_buffer: Arc<PrimaryAutoCommandBuffer>,
 }
 
