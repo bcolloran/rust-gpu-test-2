@@ -208,8 +208,28 @@ The following reference materials are available:
 - `reference_material/vulkano-master` The source code of the Vulkano library
 
 
+# "Removing" files, "corrupted" files, and file size limits
+Sometimes an agent will get stuck in a loop of thinking that a file is "corrupted", and will attempt to remove and rewrite the file over and over. 
+
+To avoid this: rather than removing existing files, the agent should start fresh in a new file with a similar name. For example, if you think `some_file.rs` has become corrupted, create a new file `some_file_1.rs` (and so on in sequence), and just point all the modules that had used `some_file.rs` at the newest version.
+
+Leave the old versions on disk. this will allow me to evaluate what went wrong.
+
+## File size recommendation
+If you try to limit your file sizes to a couple hundred lines and make sure that each file is focused on a smaller unit of fumctionality, there is less risk of one big file being corrupted
+
+
 # Commands
 The agent may run cargo commands to build and test the project, but should not run any other commands.
+
+## Pre-approved cargo commands
+The agent is strongly encouraged to run the following cargo commands as needed:
+`cargo test --workspace --verbose`
+`cargo check --lib 2>&1 | head -60`
+`cargo check --lib 2>&1 | tail -60`
+
+## Forbidden commands
+The agent may **NEVER** run any commands that modify files on disk such as `rm`, `sed`, `mv`, `cp`, etc.
 
 # Web access
 The agent may request any pages from github.com (accessing raw files via `https://github.com/.../raw/refs/...` (or whatever the best mechanism is currently) is advised), crates.io, and docs.rs for reference material.
