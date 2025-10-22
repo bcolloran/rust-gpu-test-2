@@ -58,6 +58,10 @@ thiserror = "1.0"
 anyhow = "1.0"
 
 
+[dev-dependencies]
+test-case = "3.3.1"
+
+
 [build-dependencies]
 spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main", optional = true }
 
