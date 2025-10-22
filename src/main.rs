@@ -73,12 +73,10 @@ where
         );
 
         // Use the instance from the compute runner (shared instance/device)
-        println!("Creating surface from shared instance...");
         let instance = self.compute_chain.as_ref().unwrap().instance().clone();
         let surface = Surface::from_window(instance, window.clone()).unwrap();
 
         // Load shader module for graphics
-        println!("Loading graphics shaders...");
         use vulkano::shader::spirv::bytes_to_words;
         let spirv_words = bytes_to_words(OTHER_SHADERS_SPIRV).unwrap();
         let shader_module = unsafe {
@@ -90,7 +88,6 @@ where
         };
 
         // Create graphics renderer using the compute device and queue
-        println!("Creating graphics renderer...");
         let compute_chain = self.compute_chain.as_ref().unwrap();
         let mut renderer = GraphicsRenderer::from_device(
             compute_chain.device().clone(),
@@ -101,14 +98,7 @@ where
         )
         .unwrap();
 
-        println!("\n✓ Setup complete! Starting render loop...\n");
-        println!("Controls:");
-        println!("  - Close window to exit");
-        println!("  - Particles will move and wrap around based on compute shaders");
-        println!();
-
         // Run compute once initially
-        println!("Running initial compute pass...");
         compute_chain.execute().unwrap();
 
         let buffer_x = compute_chain.typed_subbuffer_by_name::<Vec2>("x").unwrap();
@@ -275,8 +265,6 @@ fn main() -> Result<()> {
         buf_spec("v", 3, &mut v),
         buf_spec("grid", 4, &mut grid),
     );
-
-    println!("Created {} particles", n);
 
     // Create compute runner
     println!("Initializing Vulkan compute...");
