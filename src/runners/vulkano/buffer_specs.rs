@@ -34,10 +34,6 @@ pub struct SubbufferAndBindingSpec<T> {
     pub sub_buf: Subbuffer<[T]>,
 }
 
-// pub struct SubbufferAndBindingSpecs<S: DescriptorSetByName> {
-//     specs: S,
-// }
-
 pub trait IntoDescriptorSetByName {
     type Out: DescriptorSetByName;
     fn with_gpu_buffer(

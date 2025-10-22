@@ -13,7 +13,7 @@ use crate::{
     error::CrateResult,
     runners::vulkano::{
         buffer::{build_and_fill_buffer, BufNameToBufferAny},
-        buffer_specs::{DescriptorSetByName, IntoDescriptorSetByName},
+        buffer_specs::IntoDescriptorSetByName,
         device::compute_capable_device_and_queue,
         shader_buffer_mapping::{
             ComputePassInvocationInfo, ShaderPipelineInfosWithComputePipelines,

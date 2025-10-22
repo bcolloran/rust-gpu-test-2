@@ -99,6 +99,7 @@ pub struct HasPipeline {
     pipeline: Arc<ComputePipeline>,
 }
 
+#[allow(unused)]
 #[derive(Clone)]
 pub struct Ready {
     entry_point: EntryPoint,

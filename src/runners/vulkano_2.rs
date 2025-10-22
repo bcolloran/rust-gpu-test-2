@@ -4,7 +4,7 @@ use crate::{
         buffer_specs::{DescriptorSetByName, IntoDescriptorSetByName},
         device::compute_capable_device_and_queue,
         shader::shader_module,
-        shader_pipeline_builder::{InitialSpec, ShaderPipelineBuilder, ShaderPipelineSpec},
+        shader_pipeline_builder::ShaderPipelineSpec,
         typed_subbuffer_by_name::TypedSubbufferByName,
     },
 };
@@ -23,7 +23,7 @@ use vulkano::{
     sync::{self, GpuFuture},
 };
 
-/// Vulkan-based runner for bitonic sort using vulkano safe abstractions
+#[allow(unused)]
 pub struct VulkanoComputeChain<BS>
 where
     BS: IntoDescriptorSetByName<Out: 'static + DescriptorSetByName + TypedSubbufferByName>,
@@ -62,7 +62,6 @@ pub fn build_compute_pass_command_buffer<T: DescriptorSetByName>(
     for spec in pipeline_specs.iter() {
         let pipeline = spec
             .to_builder()
-            // .clone()
             .with_entry_point(shader_module.clone())?
             .with_descriptor_set_layout(device.clone())?
             .with_pipeline(device.clone())?
