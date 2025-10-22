@@ -7,6 +7,7 @@ pub mod pipeline;
 pub mod shader;
 pub mod shader_buffer_mapping;
 pub mod shader_pipeline_builder;
+pub mod typed_subbuffer_by_name;
 
 use crate::{
     error::CrateResult,

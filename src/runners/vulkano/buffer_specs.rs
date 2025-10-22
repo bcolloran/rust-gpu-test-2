@@ -15,6 +15,18 @@ pub struct DataAndBindingSpec<'a, T> {
     pub data: &'a mut [T],
 }
 
+pub fn buf_spec<'a, T>(
+    name: &'static str,
+    binding: u32,
+    data: &'a mut [T],
+) -> DataAndBindingSpec<'a, T> {
+    DataAndBindingSpec {
+        name,
+        binding,
+        data,
+    }
+}
+
 pub struct SubbufferAndBindingSpec<T> {
     pub name: &'static str,
     pub binding: u32,
@@ -22,9 +34,9 @@ pub struct SubbufferAndBindingSpec<T> {
     pub sub_buf: Subbuffer<[T]>,
 }
 
-pub struct SubbufferAndBindingSpecs<S: DescriptorSetByName> {
-    specs: S,
-}
+// pub struct SubbufferAndBindingSpecs<S: DescriptorSetByName> {
+//     specs: S,
+// }
 
 pub trait IntoDescriptorSetByName {
     type Out: DescriptorSetByName;
@@ -32,13 +44,6 @@ pub trait IntoDescriptorSetByName {
         &self,
         memory_allocator: Arc<StandardMemoryAllocator>,
     ) -> CrateResult<Self::Out>;
-}
-
-pub trait GpuBufferForSpec {
-    fn with_gpu_buffer(
-        &self,
-        memory_allocator: Arc<StandardMemoryAllocator>,
-    ) -> CrateResult<WriteDescriptorSet>;
 }
 
 impl<'a, T> IntoDescriptorSetByName for DataAndBindingSpec<'a, T>
@@ -104,9 +109,18 @@ pub trait DescriptorSetByName {
     fn descriptor_set_by_name(&self, name: &str) -> CrateResult<WriteDescriptorSet>;
 }
 
-impl<S: DescriptorSetByName> DescriptorSetByName for SubbufferAndBindingSpecs<S> {
+impl<S> DescriptorSetByName for SubbufferAndBindingSpec<S> {
     fn descriptor_set_by_name(&self, name: &str) -> CrateResult<WriteDescriptorSet> {
-        self.specs.descriptor_set_by_name(name)
+        if name == self.name {
+            Ok(WriteDescriptorSet::buffer(
+                self.binding,
+                self.sub_buf.clone(),
+            ))
+        } else {
+            Err(crate::error::ChimeraError::DescriptorSetNameNotFound(
+                name.to_string(),
+            ))
+        }
     }
 }
 

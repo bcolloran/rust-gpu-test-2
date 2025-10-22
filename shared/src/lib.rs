@@ -19,7 +19,25 @@ pub fn add_update<T: Add + AddAssign>(a: &mut T, b: T) {
 /// Workgroup size for compute shaders
 /// IMPORTANT: This must be kept in sync with the literal value in kernel/src/lib.rs
 pub const WORKGROUP_SIZE: u32 = 64;
-pub const GRID_WORKGROUP_SIZE: (u32, u32) = (16, 16);
+pub const GRID_WORKGROUP_SIZE: (u32, u32) = (8, 8);
+
+#[inline]
+pub const fn div_ceil_u32(n: u32, d: u32) -> u32 {
+    // Precondition: d > 0
+    n / d + ((n % d) != 0) as u32
+}
+
+pub fn num_workgroups_1d(num_elements: u32) -> [u32; 3] {
+    [div_ceil_u32(num_elements, WORKGROUP_SIZE), 1, 1]
+}
+
+pub fn num_workgroups_2d(num_elts_x: u32, num_elts_y: u32) -> [u32; 3] {
+    [
+        div_ceil_u32(num_elts_x, GRID_WORKGROUP_SIZE.0),
+        div_ceil_u32(num_elts_y, GRID_WORKGROUP_SIZE.1),
+        1,
+    ]
+}
 
 /// The constant used in the computation (index * 2 + COMPUTE_CONSTANT)
 pub const COMPUTE_CONSTANT: u32 = 42;

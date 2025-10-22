@@ -23,21 +23,59 @@ use crate::{
     },
 };
 
+#[derive(Clone)]
+pub struct KernelConfig {
+    entry_point_name: &'static str,
+    binding_nums_in_shader: Vec<u32>,
+    num_workgroups: [u32; 3],
+}
+pub fn kernel(
+    entry_point_name: &'static str,
+    binding_nums_in_shader: Vec<u32>,
+    num_workgroups: [u32; 3],
+) -> KernelConfig {
+    KernelConfig {
+        entry_point_name,
+        binding_nums_in_shader,
+        num_workgroups,
+    }
+}
+
+#[derive(Clone)]
+pub struct ShaderPipelineSpec {
+    invocation_name: &'static str,
+    buf_names: Vec<&'static str>,
+    kernel_config: KernelConfig,
+}
+
+impl ShaderPipelineSpec {
+    pub fn to_builder(&self) -> ShaderPipelineBuilder<InitialSpec> {
+        ShaderPipelineBuilder {
+            spec: self.clone(),
+            builder_state: InitialSpec {},
+        }
+    }
+}
+
+/// spec for a shader pipeline invocation
+pub fn invoc_spec(
+    invocation_name: &'static str,
+    buf_names: Vec<&'static str>,
+    kernel_config: KernelConfig,
+) -> ShaderPipelineSpec {
+    ShaderPipelineSpec {
+        invocation_name,
+        buf_names,
+        kernel_config,
+    }
+}
+
 /// Builder for a shader pipeline.
 /// Note that a Vulkan shader "pipeline" does not know the types of the buffers it will use. It only knows about the bindings. We only need actual buffer types when we create the descriptor sets Since a given pipeline can use multiple buffers that might be used by several pipelines, we track buffers by name. E
 #[derive(Clone)]
 pub struct ShaderPipelineBuilder<S> {
     spec: ShaderPipelineSpec,
     builder_state: S,
-}
-
-#[derive(Clone)]
-struct ShaderPipelineSpec {
-    invocation_name: String,
-    entry_point_name: String,
-    buf_names: Vec<String>,
-    binding_nums_in_shader: Vec<u32>,
-    num_workgroups: [u32; 3],
 }
 
 #[derive(Clone)]
@@ -72,30 +110,14 @@ pub struct Ready {
 // transition methods
 
 impl ShaderPipelineBuilder<InitialSpec> {
-    pub fn new(
-        invocation_name: &str,
-        entry_point_name: &str,
-        buf_names: Vec<String>,
-        binding_nums_in_shader: Vec<u32>,
-        num_workgroups: [u32; 3],
-    ) -> Self {
-        Self {
-            spec: ShaderPipelineSpec {
-                invocation_name: invocation_name.to_string(),
-                entry_point_name: entry_point_name.to_string(),
-                buf_names,
-                binding_nums_in_shader,
-                num_workgroups,
-            },
-            builder_state: InitialSpec {},
-        }
-    }
-
     pub fn with_entry_point(
         self,
         shader_module: Arc<ShaderModule>,
     ) -> CrateResult<ShaderPipelineBuilder<HasEntryPoint>> {
-        let entry_point = shader_entry_point(shader_module.clone(), &self.spec.entry_point_name)?;
+        let entry_point = shader_entry_point(
+            shader_module.clone(),
+            &self.spec.kernel_config.entry_point_name,
+        )?;
 
         Ok(ShaderPipelineBuilder {
             spec: self.spec,
@@ -111,7 +133,13 @@ impl ShaderPipelineBuilder<HasEntryPoint> {
     ) -> CrateResult<ShaderPipelineBuilder<HasDescriptorSetLayout>> {
         let mut bindings = BTreeMap::new();
 
-        for shader_binding_num in self.spec.binding_nums_in_shader.clone().iter() {
+        for shader_binding_num in self
+            .spec
+            .kernel_config
+            .binding_nums_in_shader
+            .clone()
+            .iter()
+        {
             let mut binding_desc =
                 DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer);
             binding_desc.stages = ShaderStages::COMPUTE;
@@ -127,6 +155,12 @@ impl ShaderPipelineBuilder<HasEntryPoint> {
                 ..Default::default()
             },
         )?;
+
+        println!("shader pipeline '{}':", self.spec.invocation_name);
+        println!(
+            "  Created descriptor set layout with bindings:\n    {:?}",
+            descriptor_set_layout.bindings()
+        );
 
         Ok(ShaderPipelineBuilder {
             spec: self.spec,
@@ -203,7 +237,7 @@ impl ShaderPipelineBuilder<Ready> {
             builder,
             self.builder_state.pipeline.clone(),
             self.builder_state.descriptor_set.clone(),
-            self.spec.num_workgroups,
+            self.spec.kernel_config.num_workgroups,
         )?;
 
         Ok(())

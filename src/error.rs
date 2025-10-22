@@ -13,6 +13,9 @@ pub enum ChimeraError {
     #[error("DescriptorSetNameNotFound: {0}")]
     DescriptorSetNameNotFound(String),
 
+    #[error("No descriptor set with type `{0}` named `{1}` found")]
+    TypedDescriptorSetNameNotFound(String, String),
+
     #[error("Environment variable error: {0}")]
     VarError(#[from] std::env::VarError),
 

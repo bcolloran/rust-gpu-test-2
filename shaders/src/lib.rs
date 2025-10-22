@@ -71,7 +71,7 @@ fn rand_f32<const N: usize>(xs: [u32; N]) -> f32 {
     (hash_many(xs) as f32) / (u32::MAX as f32)
 }
 
-#[spirv(compute(threads(16, 16)))]
+#[spirv(compute(threads(8, 8)))]
 pub fn fill_grid_random(
     #[spirv(global_invocation_id)] id: UVec3,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 4)] grid: &mut [shared::grid::GridCell],
