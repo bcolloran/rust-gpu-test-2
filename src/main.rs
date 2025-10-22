@@ -13,7 +13,7 @@ use rust_gpu_chimera_demo::{
             shader_pipeline_builder::{invoc_spec, kernel},
             typed_subbuffer_by_name::TypedSubbufferByName,
         },
-        vulkano_2::VulkanoComputeChain,
+        vulkano_compute_chain::VulkanoComputeChain,
     },
     *,
 };
@@ -109,10 +109,6 @@ where
 
         // Run compute once initially
         println!("Running initial compute pass...");
-        // let runner = self.compute_chain.as_ref().unwrap();
-        // let (buffer_x, num_particles) = runner
-        //     .run_compute_and_get_buffer(buffer_specs, pipeline_specs)
-        //     .unwrap();
         compute_chain.execute().unwrap();
 
         let buffer_x = compute_chain.typed_subbuffer_by_name::<Vec2>("x").unwrap();
@@ -161,24 +157,6 @@ where
                 renderer
                     .set_position_buffer(buffer_x, num_particles)
                     .unwrap();
-                // match compute_chain.run_compute_and_get_buffer(
-                //     &mut self.a,
-                //     &self.b,
-                //     &self.c,
-                //     &self.d,
-                //     &mut self.x,
-                //     &self.v,
-                //     &mut self.g,
-                // ) {
-                //     Ok((buffer_x, num_particles)) => {
-                //         if let Err(e) = renderer.set_position_buffer(buffer_x, num_particles) {
-                //             eprintln!("Error setting position buffer: {}", e);
-                //         }
-                //     }
-                //     Err(e) => {
-                //         eprintln!("Compute error: {}", e);
-                //     }
-                // }
 
                 // Render the frame
                 if let Err(e) = renderer.render_frame() {
@@ -260,8 +238,6 @@ fn main() -> Result<()> {
 
     let invocation_specs = vec![
         invoc_spec("adder_ab", vec!["a", "b"], adder_kernel.clone()),
-        // invoc_spec("adder_ac", vec!["a", "c"], adder_kernel.clone()),
-        // invoc_spec("adder_ad", vec!["a", "d"], adder_kernel.clone()),
         invoc_spec(
             "step_particles_0",
             vec!["x", "v"],

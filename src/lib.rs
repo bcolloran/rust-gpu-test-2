@@ -9,7 +9,6 @@
 pub mod error;
 pub mod graphics;
 pub mod runners;
-pub use runners::VulkanoRunner;
 
 #[cfg(any(feature = "vulkano"))]
 pub const OTHER_SHADERS_SPIRV: &[u8] = include_bytes!(env!("SHADERS_SPV_PATH"));

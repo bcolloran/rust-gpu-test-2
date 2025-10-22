@@ -42,6 +42,7 @@ pub fn kernel(
 }
 
 #[derive(Clone)]
+#[allow(unused)]
 pub struct ShaderPipelineSpec {
     invocation_name: &'static str,
     buf_names: Vec<&'static str>,
@@ -157,11 +158,11 @@ impl ShaderPipelineBuilder<HasEntryPoint> {
             },
         )?;
 
-        println!("shader pipeline '{}':", self.spec.invocation_name);
-        println!(
-            "  Created descriptor set layout with bindings:\n    {:?}",
-            descriptor_set_layout.bindings()
-        );
+        // println!("shader pipeline '{}':", self.spec.invocation_name);
+        // println!(
+        //     "  Created descriptor set layout with bindings:\n    {:?}",
+        //     descriptor_set_layout.bindings()
+        // );
 
         Ok(ShaderPipelineBuilder {
             spec: self.spec,

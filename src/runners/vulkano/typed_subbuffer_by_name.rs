@@ -1,10 +1,7 @@
 use variadics_please::all_tuples_enumerated;
 use vulkano::buffer::Subbuffer;
 
-use crate::{
-    error::CrateResult,
-    runners::vulkano::buffer_specs::{DescriptorSetByName, SubbufferAndBindingSpec},
-};
+use crate::{error::CrateResult, runners::vulkano::buffer_specs::SubbufferAndBindingSpec};
 
 pub trait TypedSubbufferByName {
     fn subbuffer<T: 'static>(&self, name: &str) -> CrateResult<Subbuffer<[T]>>;

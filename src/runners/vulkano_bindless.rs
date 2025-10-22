@@ -17,7 +17,7 @@ use crate::{
 };
 
 use glam::Vec2;
-use shared::{GRID_WORKGROUP_SIZE, WORKGROUP_SIZE};
+use shared::WORKGROUP_SIZE;
 
 use std::sync::Arc;
 
@@ -50,7 +50,7 @@ pub struct VulkanoBindlessRunner {
     memory_allocator: Arc<StandardMemoryAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
-    device_name: String,
+    // device_name: String,
 }
 
 impl VulkanoBindlessRunner {
@@ -86,7 +86,7 @@ impl VulkanoBindlessRunner {
             memory_allocator,
             descriptor_set_allocator,
             command_buffer_allocator,
-            device_name,
+            // device_name,
         })
     }
 
