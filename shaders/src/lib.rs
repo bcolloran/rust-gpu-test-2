@@ -5,11 +5,10 @@
 use core::u32;
 
 use glam::UVec3;
-use shared::grid::{grid_index, grid_index_unit_xy, GRID_SIZE};
+use shared::grid::{grid_index, grid_index_unit_xy};
 use spirv_std::{
     arch::atomic_f_add,
     glam::{self, vec2, Vec2, Vec4},
-    num_traits::float::FloatCore,
     spirv,
 };
 
@@ -92,7 +91,6 @@ pub fn fill_grid_random(
     #[spirv(global_invocation_id)] id: UVec3,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 4)] grid: &mut [shared::grid::GridCell],
 ) {
-    let grid_width = 256; // Example fixed grid width
     let x = id.x;
     let y = id.y;
     let index = grid_index(x, y);
@@ -138,7 +136,7 @@ pub fn p2g(
 
     const SCOPE: u32 = Scope::Device as u32;
     const SEMANTICS: u32 = Semantics::NONE.bits();
-    unsafe { atomic_f_add::<_, SCOPE, SEMANTICS>(m, 1.0) };
+    unsafe { atomic_f_add::<_, SCOPE, SEMANTICS>(m, 0.1) };
 }
 
 // ==============================================================================
