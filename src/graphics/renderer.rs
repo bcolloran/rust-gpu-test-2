@@ -10,10 +10,14 @@ use crate::{
     error::CrateResult,
     graphics::{
         device::select_physical_device,
-        pipeline::{create_descriptor_set, create_graphics_pipeline},
+        pipeline::{
+            create_descriptor_set, create_graphics_pipeline, create_grid_descriptor_set,
+            create_grid_pipeline,
+        },
     },
 };
 use glam::Vec2;
+use shared::grid::{GridCell, GridPushConstants};
 use std::sync::Arc;
 use vulkano::{
     buffer::Subbuffer,
@@ -39,7 +43,7 @@ use vulkano::{
 /// - Device and queue for GPU operations
 /// - Swapchain for displaying images on screen
 /// - Render pass defining how we draw
-/// - Graphics pipeline with our shaders
+/// - Graphics pipelines (grid + particles) with shaders
 /// - Command buffers with recorded draw commands
 /// - Synchronization primitives (fences) for frame pacing
 pub struct GraphicsRenderer {
@@ -48,7 +52,11 @@ pub struct GraphicsRenderer {
     swapchain: Arc<Swapchain>,
     render_pass: Arc<RenderPass>,
     framebuffers: Vec<Arc<Framebuffer>>,
-    pipeline: Arc<vulkano::pipeline::GraphicsPipeline>,
+
+    // Two pipelines: one for grid heatmap, one for particle points
+    grid_pipeline: Arc<vulkano::pipeline::GraphicsPipeline>,
+    particle_pipeline: Arc<vulkano::pipeline::GraphicsPipeline>,
+
     command_buffers: Vec<Arc<PrimaryAutoCommandBuffer>>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
@@ -65,6 +73,11 @@ pub struct GraphicsRenderer {
     // Buffer containing particle positions and number of particles to render
     position_buffer: Option<Subbuffer<[Vec2]>>,
     num_particles: usize,
+
+    // Grid buffer and dimensions for heatmap rendering
+    grid_buffer: Option<Subbuffer<[GridCell]>>,
+    grid_width: u32,
+    grid_height: u32,
 }
 
 impl GraphicsRenderer {
@@ -225,8 +238,17 @@ impl GraphicsRenderer {
             depth_range: 0.0..=1.0,
         };
 
-        // Create the graphics pipeline with our shaders
-        let pipeline = create_graphics_pipeline(
+        // Create the grid pipeline for rendering the heatmap
+        let grid_pipeline = create_grid_pipeline(
+            device.clone(),
+            vs.clone(),
+            fs.clone(),
+            render_pass.clone(),
+            viewport.clone(),
+        )?;
+
+        // Create the particle pipeline for rendering points
+        let particle_pipeline = create_graphics_pipeline(
             device.clone(),
             vs.clone(),
             fs.clone(),
@@ -246,7 +268,7 @@ impl GraphicsRenderer {
             Default::default(),
         ));
 
-        // Initialize with empty command buffers (will be created when position buffer is set)
+        // Initialize with empty command buffers (will be created when buffers are set)
         let command_buffers = vec![];
 
         Ok(Self {
@@ -255,7 +277,8 @@ impl GraphicsRenderer {
             swapchain,
             render_pass,
             framebuffers,
-            pipeline,
+            grid_pipeline,
+            particle_pipeline,
             command_buffers,
             command_buffer_allocator,
             descriptor_set_allocator,
@@ -266,7 +289,29 @@ impl GraphicsRenderer {
             viewport,
             position_buffer: None,
             num_particles: 0,
+            grid_buffer: None,
+            grid_width: 0,
+            grid_height: 0,
         })
+    }
+
+    /// Set the grid buffer to render
+    ///
+    /// This updates the command buffers to render the grid heatmap.
+    pub fn set_grid_buffer(
+        &mut self,
+        grid_buffer: Subbuffer<[GridCell]>,
+        grid_width: u32,
+        grid_height: u32,
+    ) -> CrateResult<()> {
+        self.grid_buffer = Some(grid_buffer);
+        self.grid_width = grid_width;
+        self.grid_height = grid_height;
+
+        // Recreate command buffers if we have all necessary data
+        self.recreate_command_buffers()?;
+
+        Ok(())
     }
 
     /// Set the position buffer to render
@@ -277,22 +322,37 @@ impl GraphicsRenderer {
         position_buffer: Subbuffer<[Vec2]>,
         num_particles: usize,
     ) -> CrateResult<()> {
-        self.position_buffer = Some(position_buffer.clone());
+        self.position_buffer = Some(position_buffer);
         self.num_particles = num_particles;
 
-        // Recreate command buffers with the new buffer
-        if !self.framebuffers.is_empty() {
-            self.command_buffers = create_command_buffers_with_buffer(
-                &self.command_buffer_allocator,
-                &self.descriptor_set_allocator,
-                &self.queue,
-                &self.pipeline,
-                &self.framebuffers,
-                &self.render_pass,
-                position_buffer,
-                num_particles,
-            )?;
+        // Recreate command buffers if we have all necessary data
+        self.recreate_command_buffers()?;
+
+        Ok(())
+    }
+
+    /// Recreate command buffers with current grid and particle buffers
+    fn recreate_command_buffers(&mut self) -> CrateResult<()> {
+        // Only recreate if we have framebuffers and at least one buffer set
+        if self.framebuffers.is_empty() {
+            return Ok(());
         }
+
+        // Create command buffers with both grid and particle rendering
+        self.command_buffers = create_dual_command_buffers(
+            &self.command_buffer_allocator,
+            &self.descriptor_set_allocator,
+            &self.queue,
+            &self.grid_pipeline,
+            &self.particle_pipeline,
+            &self.framebuffers,
+            &self.render_pass,
+            self.grid_buffer.clone(),
+            self.grid_width,
+            self.grid_height,
+            self.position_buffer.clone(),
+            self.num_particles,
+        )?;
 
         Ok(())
     }
@@ -376,8 +436,8 @@ impl GraphicsRenderer {
         // Update viewport for new dimensions
         self.viewport.extent = [new_dimensions[0] as f32, new_dimensions[1] as f32];
 
-        // Recreate pipeline with new viewport
-        self.pipeline = create_graphics_pipeline(
+        // Recreate both pipelines with new viewport
+        self.grid_pipeline = create_grid_pipeline(
             self.device.clone(),
             self.vs.clone(),
             self.fs.clone(),
@@ -385,19 +445,16 @@ impl GraphicsRenderer {
             self.viewport.clone(),
         )?;
 
-        // Recreate command buffers with the position buffer if it's set
-        if let Some(position_buffer) = &self.position_buffer {
-            self.command_buffers = create_command_buffers_with_buffer(
-                &self.command_buffer_allocator,
-                &self.descriptor_set_allocator,
-                &self.queue,
-                &self.pipeline,
-                &self.framebuffers,
-                &self.render_pass,
-                position_buffer.clone(),
-                self.num_particles,
-            )?;
-        }
+        self.particle_pipeline = create_graphics_pipeline(
+            self.device.clone(),
+            self.vs.clone(),
+            self.fs.clone(),
+            self.render_pass.clone(),
+            self.viewport.clone(),
+        )?;
+
+        // Recreate command buffers with current buffers
+        self.recreate_command_buffers()?;
 
         Ok(())
     }
@@ -439,31 +496,49 @@ fn create_framebuffers(
         .collect::<Vec<_>>()
 }
 
-/// Helper function to create command buffers for rendering points from a buffer
+/// Helper function to create command buffers that render both grid and particles
 ///
 /// Each command buffer:
 /// 1. Begins a render pass with a clear color (dark blue)
-/// 2. Binds the graphics pipeline
-/// 3. Binds the descriptor set containing the position buffer
-/// 4. Draws N vertices (one for each particle), reading positions from the buffer
-/// 5. Ends the render pass
-fn create_command_buffers_with_buffer(
+/// 2. Renders the grid heatmap (if grid buffer is set)
+/// 3. Renders the particle points on top (if position buffer is set)
+/// 4. Ends the render pass
+fn create_dual_command_buffers(
     allocator: &Arc<StandardCommandBufferAllocator>,
     descriptor_set_allocator: &Arc<StandardDescriptorSetAllocator>,
     queue: &Arc<Queue>,
-    pipeline: &Arc<vulkano::pipeline::GraphicsPipeline>,
+    grid_pipeline: &Arc<vulkano::pipeline::GraphicsPipeline>,
+    particle_pipeline: &Arc<vulkano::pipeline::GraphicsPipeline>,
     framebuffers: &[Arc<Framebuffer>],
     _render_pass: &Arc<RenderPass>, // Kept for consistency but not used
-    position_buffer: Subbuffer<[Vec2]>,
+    grid_buffer: Option<Subbuffer<[GridCell]>>,
+    grid_width: u32,
+    grid_height: u32,
+    position_buffer: Option<Subbuffer<[Vec2]>>,
     num_particles: usize,
 ) -> CrateResult<Vec<Arc<PrimaryAutoCommandBuffer>>> {
-    // Create descriptor set that binds the position buffer
-    let descriptor_set = create_descriptor_set(
-        pipeline.device().clone(),
-        pipeline,
-        position_buffer,
-        descriptor_set_allocator,
-    )?;
+    // Create descriptor sets if buffers are available
+    let grid_descriptor_set = if let Some(grid_buf) = grid_buffer {
+        Some(create_grid_descriptor_set(
+            grid_pipeline.device().clone(),
+            grid_pipeline,
+            grid_buf,
+            descriptor_set_allocator,
+        )?)
+    } else {
+        None
+    };
+
+    let particle_descriptor_set = if let Some(pos_buf) = position_buffer {
+        Some(create_descriptor_set(
+            particle_pipeline.device().clone(),
+            particle_pipeline,
+            pos_buf,
+            descriptor_set_allocator,
+        )?)
+    } else {
+        None
+    };
 
     framebuffers
         .iter()
@@ -486,19 +561,44 @@ fn create_command_buffers_with_buffer(
                             contents: SubpassContents::Inline,
                             ..Default::default()
                         },
-                    )?
-                    // Bind our graphics pipeline
-                    .bind_pipeline_graphics(pipeline.clone())?
-                    // Bind the descriptor set with the position buffer
-                    .bind_descriptor_sets(
-                        vulkano::pipeline::PipelineBindPoint::Graphics,
-                        pipeline.layout().clone(),
-                        0,
-                        descriptor_set.clone(),
-                    )?
-                    // Draw N points, vertex shader will read positions from buffer using vertex_index
-                    .draw(num_particles as u32, 1, 0, 0)?
-                    .end_render_pass(Default::default())?;
+                    )?;
+
+                // Render grid heatmap first (if available)
+                if let Some(grid_desc_set) = &grid_descriptor_set {
+                    let num_cells = grid_width * grid_height;
+                    let push_constants = GridPushConstants {
+                        grid_width,
+                        grid_height,
+                    };
+
+                    builder
+                        .bind_pipeline_graphics(grid_pipeline.clone())?
+                        .bind_descriptor_sets(
+                            vulkano::pipeline::PipelineBindPoint::Graphics,
+                            grid_pipeline.layout().clone(),
+                            0,
+                            grid_desc_set.clone(),
+                        )?
+                        .push_constants(grid_pipeline.layout().clone(), 0, push_constants)?
+                        // Draw 6 vertices per instance (2 triangles = 1 quad per grid cell)
+                        .draw(6, num_cells, 0, 0)?;
+                }
+
+                // Render particles on top (if available)
+                if let Some(particle_desc_set) = &particle_descriptor_set {
+                    builder
+                        .bind_pipeline_graphics(particle_pipeline.clone())?
+                        .bind_descriptor_sets(
+                            vulkano::pipeline::PipelineBindPoint::Graphics,
+                            particle_pipeline.layout().clone(),
+                            0,
+                            particle_desc_set.clone(),
+                        )?
+                        // Draw N points, vertex shader reads positions using vertex_index
+                        .draw(num_particles as u32, 1, 0, 0)?;
+                }
+
+                builder.end_render_pass(Default::default())?;
             }
 
             Ok(builder.build()?)

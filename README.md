@@ -5,22 +5,32 @@
 
 
 # Project Structure
-
 ```
 rust-gpu-chimera-demo/
-├── kernel/           # Compute kernel logic and entrypoints
+├── shaders/          # GPU shaders (compute + graphics)
 │   └── src/
-│       └── lib.rs
-├── shared/           # Code that runs on both the CPU and GPU
+│       ├── lib.rs         # Main shader entry points
+│       └── bindless.rs    # Bindless resource shaders
+├── shared/           # Code and types shared between CPU and GPU
 │   └── src/
-│       └── lib.rs
+│       ├── lib.rs
+│       └── grid.rs        # GridCell and GridPushConstants types
 ├── src/
-│   ├── runners/      # Code that runs on the CPU/host and interfaces with the GPU
-│   │   ├── ash.rs    # DEPRECATED, reference only
+│   ├── graphics/     # Graphics rendering module
+│   │   ├── device.rs      # Device/queue selection
+│   │   ├── pipeline.rs    # Pipeline creation (grid + particles)
+│   │   ├── renderer.rs    # Main renderer with dual pipelines
+│   │   └── README.md      # Graphics module documentation
+│   ├── runners/      # Compute pipeline runners
 │   │   ├── vulkano.rs
-│   │   └── vulkano-bindless.rs
+│   │   └── vulkano_compute_chain.rs
 │   ├── lib.rs
-│   └── main.rs       # Demo application binary
-└── build.rs          # Kernel compilation orchestration
+│   └── main.rs       # Demo application with windowing
+└── build.rs          # Shader compilation orchestration
 ```
+
+## `shared` Crate
+It's important that types that are shared between the CPU and GPU have identical memory layouts. This crate is included as a dependency in both the `kernel` and main application crates.
+
+Types in this crate will include things like: push constant structs, items used in data buffers, and any other data structures that need to be shared between host and device.
 

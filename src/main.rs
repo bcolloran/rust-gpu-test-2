@@ -101,10 +101,21 @@ where
         // Run compute once initially
         compute_chain.execute().unwrap();
 
+        // Set up particle positions
         let buffer_x = compute_chain.typed_subbuffer_by_name::<Vec2>("x").unwrap();
         let num_particles = buffer_x.len() as usize;
         renderer
             .set_position_buffer(buffer_x, num_particles)
+            .unwrap();
+
+        // Set up grid buffer for heatmap rendering
+        let grid_buffer = compute_chain
+            .typed_subbuffer_by_name::<GridCell>("grid")
+            .unwrap();
+        // Grid is N x N where N is the number of particles (since grid is n*n elements)
+        let grid_size = (num_particles as f64).sqrt() as u32;
+        renderer
+            .set_grid_buffer(grid_buffer, grid_size, grid_size)
             .unwrap();
 
         self.window = Some(window);
@@ -140,12 +151,22 @@ where
                 }
             }
             WindowEvent::RedrawRequested => {
-                // Run compute shader to update particle positions
+                // Run compute shader to update particle positions and grid
                 compute_chain.execute().unwrap();
+
                 let buffer_x = compute_chain.typed_subbuffer_by_name::<Vec2>("x").unwrap();
                 let num_particles = buffer_x.len() as usize;
                 renderer
                     .set_position_buffer(buffer_x, num_particles)
+                    .unwrap();
+
+                // Update grid buffer (it's regenerated each frame by fill_grid_random)
+                let grid_buffer = compute_chain
+                    .typed_subbuffer_by_name::<GridCell>("grid")
+                    .unwrap();
+                let grid_size = (num_particles as f64).sqrt() as u32;
+                renderer
+                    .set_grid_buffer(grid_buffer, grid_size, grid_size)
                     .unwrap();
 
                 // Render the frame

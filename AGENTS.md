@@ -1,11 +1,11 @@
-
-
 # Getting started
 Before starting any implementation, the agent should read the entire specification provided by the user. The agent should make sure to understand the requirements and constraints of the task. The agent should come up with a plan for how to implement the task, breaking it down into smaller sub-tasks if necessary.
 
 The agent should make note of any apparent misspecifications, ambiguities in the spec, or edge cases or surprises that come up during the implementation, and report those to the user in the post-implementation summary and in the PR description.
 
 In most cases, the agent should make a best-effort attempt to implement the task, and inform the user of any uncertainties or issues that arise during the implementation. However, if the agent is *very* confident that the task is untenable, or if there are any *deep* uncertainties about the task, the agent should inform the user and ask for guidance before starting any implementation.
+
+The agent must always read the root `README.md` for large scale context. Depending on the part of the code the agent is working on, there may be relevant topic-specific READMEs (e.g., in `src/graphics/README.md`), and the agent should read those as well. 
 
 
 # Tests
@@ -48,7 +48,21 @@ fn test_split_u64_roundtrip(val: u64) {
 }
 ```
 
+# Implemetation practices
+## Readability and comments **IMPORTANT**
+**The user is a novice in shader programming and graphics programming. The agent should take extra care to write clear, well-documented code that is easy for a beginner to understand.** 
 
+This project is intended to be educational, so clarity and simplicity are more important than performance optimizations or advanced techniques. (`TODO` Comments may be added describing future improvements, but the agent should avoid adding complex or advanced features that may confuse a beginner.)
+
+The agent should strive to write code that is easy to read and understand. This includes using clear and descriptive variable and function names, as well as adding comments where necessary to explain complex logic or design. Functions and methods should always have doc comments explaining their purpose, parameters, and return values.
+
+## File size recommendation
+If you try to limit your file sizes to a couple hundred lines and make sure that each file is focused on a smaller unit of fumctionality. Files that are longer than about 200-300 lines is a code smell; there is no hard rule against this, but it may indicate that the code could benefit from being broken into smaller modular parts. 
+
+Also sticking with short files introduces less risk of one big file being corrupted during editing.
+
+## Updating documentation
+Whenever you make changes to the codebase, you should also update any relevant documentation to reflect those changes. This includes updating comments in the code, as well as updating any external documentation such as README files.
 
 
 # Implementing macros
@@ -63,7 +77,7 @@ The agent should then implement the macro to make the tests pass.
 When generating code in a macro, always use fully qualified paths to refer to types and functions. This avoids issues with name resolution and ensures that the generated code will compile correctly regardless of the context in which it is used. For example, instead of generating code that refers to `Vec`, generate code that refers to `::std::vec::Vec`.
 
 
-# Implementation practices
+## Macro Implementation practices
 Be sure to break up the macro implementation into small, manageable functions that handle specific parts/cases of the macro expansion. This will make the code easier to read and maintain, and, most importantly, will make the tests easier to write and understand (it is essential for reviews that the macros give clear examples of input and output; breaking up the macro implementation into small functions helps with this).
 
 
@@ -215,22 +229,23 @@ To avoid this: rather than removing existing files, the agent should start fresh
 
 Leave the old versions on disk. this will allow me to evaluate what went wrong.
 
-## File size recommendation
-If you try to limit your file sizes to a couple hundred lines and make sure that each file is focused on a smaller unit of fumctionality, there is less risk of one big file being corrupted
-
-
 # Commands
 The agent may run cargo commands to build and test the project, but should not run any other commands.
 
 ## Pre-approved cargo commands
 The agent is strongly encouraged to run the following cargo commands as needed:
-`cargo test --workspace --verbose`
+
+`cargo test --workspace --verbose | head -60`
+`cargo test --workspace --verbose | tail -60`
 `cargo check --lib 2>&1 | head -60`
 `cargo check --lib 2>&1 | tail -60`
+**BE SURE TO ALWAYS USE _60_ LINES OF OUTPUT WHEN USING HEAD/TAIL!!!** 60 lines has been pre-approved, other values have not and will require user approval, which will slow down progress!!!
 
-## Forbidden commands
-The agent may **NEVER** run any commands that modify files on disk such as `rm`, `sed`, `mv`, `cp`, etc.
+## FORBIDDEN COMMANDS
+**THIS IS IMPORTANT**: The agent may **NEVER** run any commands that modify files on disk such as `rm`, `sed`, `mv`, `cp`, etc.
 
 # Web access
-The agent may request any pages from github.com (accessing raw files via `https://github.com/.../raw/refs/...` (or whatever the best mechanism is currently) is advised), crates.io, and docs.rs for reference material.
+The agent may request any pages from github.com. Accessing raw files via `https://github.com/.../raw/refs/...` is advised (or whatever is currently the best mechanism to get raw file contents).
+
+Also highly recommend checking e.g. crates.io, and docs.rs for reference material.
 
