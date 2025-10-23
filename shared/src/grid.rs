@@ -13,6 +13,19 @@ pub struct GridCell {
     pub velocity: Vec2,
 }
 
+pub const GRID_SIZE: u32 = 16;
+
+pub const fn grid_index(x: u32, y: u32) -> usize {
+    (y * GRID_SIZE + x) as usize
+}
+
+/// compute the linear index in a GRID_SIZE x GRID_SIZE grid from (x, y) in [0.0, 1.0] range
+pub const fn grid_index_unit_xy(x: f32, y: f32) -> usize {
+    let grid_x = (x * GRID_SIZE as f32) as u32;
+    let grid_y = (y * GRID_SIZE as f32) as u32;
+    grid_index(grid_x, grid_y)
+}
+
 /// Push constants structure for grid rendering
 ///
 /// This is used to pass the grid dimensions to the vertex shader.

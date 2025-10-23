@@ -8,7 +8,7 @@ fn main() {
 
 #[cfg(any(feature = "vulkan"))]
 fn build_spirv_kernel() {
-    use spirv_builder::SpirvBuilder;
+    use spirv_builder::{Capability, SpirvBuilder};
     use std::path::PathBuf;
 
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -16,6 +16,11 @@ fn build_spirv_kernel() {
 
     let result = SpirvBuilder::new(kernels_path, "spirv-unknown-vulkan1.4")
         .scalar_block_layout(true)
+        .extension("SPV_EXT_shader_atomic_float_add")
+        // .capability(Capability::AtomicFloat16AddEXT)
+        .capability(Capability::AtomicFloat32AddEXT)
+        .capability(Capability::AtomicFloat64AddEXT)
+        .capability(Capability::VulkanMemoryModelDeviceScopeKHR)
         .print_metadata(spirv_builder::MetadataPrintout::Full)
         .build()
         .unwrap();

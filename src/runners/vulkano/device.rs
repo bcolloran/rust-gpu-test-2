@@ -7,7 +7,8 @@ use vulkano::{
     VulkanLibrary,
 };
 
-pub fn compute_capable_device_and_queue() -> CrateResult<(Arc<Instance>, String, Arc<Device>, Arc<Queue>)> {
+pub fn compute_capable_device_and_queue(
+) -> CrateResult<(Arc<Instance>, String, Arc<Device>, Arc<Queue>)> {
     // 1. Load the Vulkan library
     let library = VulkanLibrary::new()?;
 
@@ -16,8 +17,8 @@ pub fn compute_capable_device_and_queue() -> CrateResult<(Arc<Instance>, String,
     // Enable surface extension and platform-specific window extensions
     instance_info.enabled_extensions = vulkano::instance::InstanceExtensions {
         khr_surface: true,
-        khr_xlib_surface: true,  // For X11/Linux
-        khr_xcb_surface: true,   // Alternative X11
+        khr_xlib_surface: true,    // For X11/Linux
+        khr_xcb_surface: true,     // Alternative X11
         khr_wayland_surface: true, // For Wayland/Linux
         ..Default::default()
     };
@@ -38,8 +39,9 @@ pub fn compute_capable_device_and_queue() -> CrateResult<(Arc<Instance>, String,
         .iter()
         .enumerate()
         .find(|(_, q)| {
-            q.queue_flags.contains(vulkano::device::QueueFlags::COMPUTE) &&
-            q.queue_flags.contains(vulkano::device::QueueFlags::GRAPHICS)
+            q.queue_flags.contains(vulkano::device::QueueFlags::COMPUTE)
+                && q.queue_flags
+                    .contains(vulkano::device::QueueFlags::GRAPHICS)
         })
         .map(|(i, q)| (i as u32, q.clone()))
         .ok_or(ChimeraError::NoComputeQueue)?;
@@ -51,6 +53,7 @@ pub fn compute_capable_device_and_queue() -> CrateResult<(Arc<Instance>, String,
     let required_extensions = DeviceExtensions {
         khr_storage_buffer_storage_class: true,
         khr_swapchain: true, // Required for graphics rendering
+        ext_shader_atomic_float: true,
         ..DeviceExtensions::empty()
     };
 
@@ -60,14 +63,28 @@ pub fn compute_capable_device_and_queue() -> CrateResult<(Arc<Instance>, String,
     // shader module creation (previous runtime error root cause).
     let mut required_features = DeviceFeatures::empty();
     required_features.vulkan_memory_model = true;
+    required_features.vulkan_memory_model_device_scope = true;
 
-    // Verify support before requesting so we can provide a clearer error.
-    if !physical.supported_features().contains(&required_features) {
-        return Err(ChimeraError::Other(
-            "Selected physical device does not support required feature: vulkan_memory_model"
-                .into(),
-        ));
-    }
+    required_features.shader_buffer_float32_atomics = true;
+    required_features.shader_buffer_float32_atomic_add = true;
+    // required_features.shader_buffer_float32_atomic_min_max = true;
+
+    required_features.shader_buffer_float64_atomics = true;
+    required_features.shader_buffer_float64_atomic_add = true;
+    // required_features.shader_buffer_float64_atomic_min_max = true;
+
+    required_features.shader_buffer_int64_atomics = true;
+
+    // dbg!(physical.supported_features());
+    // // Verify support before requesting so we can provide a clearer error.
+
+    // required_features.check_requirements(&physical.supported_features());
+
+    // if !physical.supported_features().contains(&required_features) {
+    //     return Err(ChimeraError::Other(
+    //         "Selected physical device does not support required feature".into(),
+    //     ));
+    // }
 
     let (device, mut queues) = Device::new(
         physical,

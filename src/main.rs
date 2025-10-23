@@ -17,7 +17,10 @@ use rust_gpu_chimera_demo::{
     },
     *,
 };
-use shared::{grid::GridCell, num_workgroups_1d, num_workgroups_2d};
+use shared::{
+    grid::{GridCell, GRID_SIZE},
+    num_workgroups_1d, num_workgroups_2d,
+};
 use vulkano::{shader::ShaderModule, swapchain::Surface};
 use winit::{
     application::ApplicationHandler,
@@ -164,9 +167,9 @@ where
                 let grid_buffer = compute_chain
                     .typed_subbuffer_by_name::<GridCell>("grid")
                     .unwrap();
-                let grid_size = (num_particles as f64).sqrt() as u32;
+
                 renderer
-                    .set_grid_buffer(grid_buffer, grid_size, grid_size)
+                    .set_grid_buffer(grid_buffer, GRID_SIZE, GRID_SIZE)
                     .unwrap();
 
                 // Render the frame
@@ -237,7 +240,9 @@ fn main() -> Result<()> {
         })
         .collect::<Vec<Vec2>>();
 
-    let mut grid = (0..(n * n)).map(|_| GridCell::zeroed()).collect::<Vec<_>>();
+    let mut grid = (0..(GRID_SIZE * GRID_SIZE))
+        .map(|_| GridCell::zeroed())
+        .collect::<Vec<_>>();
 
     let buf_specs = (
         buf_spec("a", 0, &mut a),
@@ -256,7 +261,10 @@ fn main() -> Result<()> {
     let adder_kernel = kernel("adder", vec![0, 1], wg_1d);
     let step_particles_kernel = kernel("step_particles", vec![2, 3], wg_1d);
     let wrap_particles_kernel = kernel("wrap_particles", vec![2], wg_1d);
+
     let fill_grid_random_kernel = kernel("fill_grid_random", vec![4], wg_2d);
+    let clear_grid_mass_kernel = kernel("clear_grid_mass", vec![4], wg_2d);
+    let p2g_kernel = kernel("p2g", vec![2, 4], wg_1d);
 
     let invocation_chain = vec![
         invoc_spec("adder_ab", vec!["a", "b"], adder_kernel.clone()),
@@ -281,11 +289,17 @@ fn main() -> Result<()> {
             step_particles_kernel.clone(),
         ),
         invoc_spec("wrap_particles", vec!["x"], wrap_particles_kernel.clone()),
+        // invoc_spec(
+        //     "fill_grid_random",
+        //     vec!["grid"],
+        //     fill_grid_random_kernel.clone(),
+        // ),
         invoc_spec(
-            "fill_grid_random",
+            "clear_grid_mass",
             vec!["grid"],
-            fill_grid_random_kernel.clone(),
+            clear_grid_mass_kernel.clone(),
         ),
+        invoc_spec("p2g", vec!["x", "grid"], p2g_kernel.clone()),
     ];
 
     // Create compute runner

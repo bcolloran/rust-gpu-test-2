@@ -5,10 +5,15 @@
 use core::u32;
 
 use glam::UVec3;
+use shared::grid::{grid_index, grid_index_unit_xy, GRID_SIZE};
 use spirv_std::{
+    arch::atomic_f_add,
     glam::{self, vec2, Vec2, Vec4},
+    num_traits::float::FloatCore,
     spirv,
 };
+
+use spirv_std::memory::{Scope, Semantics};
 
 pub mod bindless;
 pub mod mult;
@@ -39,7 +44,18 @@ pub fn wrap_particles(
     #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] x: &mut [Vec2],
 ) {
     let i = id.x as usize;
-    x[i] = x[i] % Vec2::splat(1.0);
+    if x[i].x < 0.0 {
+        x[i].x += 1.0;
+    }
+    if x[i].x >= 1.0 {
+        x[i].x -= 1.0;
+    }
+    if x[i].y < 0.0 {
+        x[i].y += 1.0;
+    }
+    if x[i].y >= 1.0 {
+        x[i].y -= 1.0;
+    }
 }
 
 #[inline]
@@ -63,7 +79,7 @@ pub fn hash_many<const N: usize>(xs: [u32; N]) -> u32 {
         acc ^= y.wrapping_add(0x85EB_CA6B);
         acc = acc.rotate_left(13);
     }
-    wang32(acc) // or quick_mix32(acc)
+    wang32(acc)
 }
 
 #[inline]
@@ -79,7 +95,7 @@ pub fn fill_grid_random(
     let grid_width = 256; // Example fixed grid width
     let x = id.x;
     let y = id.y;
-    let index = y as usize * grid_width + x as usize;
+    let index = grid_index(x, y);
 
     // Simple pseudo-random generation based on indices
     let mass = rand_f32([x, y, 0]);
@@ -90,6 +106,39 @@ pub fn fill_grid_random(
 
     grid[index].mass = mass;
     grid[index].velocity = velocity;
+}
+
+#[spirv(compute(threads(8, 8)))]
+pub fn clear_grid_mass(
+    #[spirv(global_invocation_id)] id: UVec3,
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 4)] grid: &mut [shared::grid::GridCell],
+) {
+    let x = id.x;
+    let y = id.y;
+    let index = grid_index(x, y);
+
+    grid[index].mass = 0.0;
+}
+
+#[spirv(compute(threads(64)))]
+pub fn p2g(
+    #[spirv(global_invocation_id)] id: UVec3,
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] ps: &mut [Vec2],
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 4)] grid: &mut [shared::grid::GridCell],
+) {
+    let i = id.x as usize;
+
+    let p = ps[i];
+
+    let index = grid_index_unit_xy(p.x, p.y);
+
+    // let mass = 10.0;
+    // let velocity = vec2(1.0, -9.0);
+    let m = &mut grid[index].mass;
+
+    const SCOPE: u32 = Scope::Device as u32;
+    const SEMANTICS: u32 = Semantics::NONE.bits();
+    unsafe { atomic_f_add::<_, SCOPE, SEMANTICS>(m, 1.0) };
 }
 
 // ==============================================================================
@@ -239,7 +288,7 @@ pub fn grid_vs(
 #[spirv(fragment)]
 pub fn grid_fs(in_mass: f32, output: &mut Vec4) {
     // Clamp mass to [0, 1] range to be safe
-    let mass_clamped = in_mass.clamp(0.0, 1.0);
+    let mass_clamped = 0.25 * in_mass.clamp(0.0, 1.0);
 
     // Simple grayscale mapping: mass directly maps to brightness
     // You could add color mapping here for a more interesting heatmap
