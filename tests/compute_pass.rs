@@ -190,7 +190,7 @@ fn test_single_fill_grid_random_execution() {
     // (the shader fills with pseudo-random values)
     let mut non_zero_count = 0;
     for cell in grid_read.iter() {
-        if cell.mass > 0.0 || cell.velocity.x != 0.0 || cell.velocity.y != 0.0 {
+        if cell.mass > 0.0 || cell.v.x != 0.0 || cell.v.y != 0.0 {
             non_zero_count += 1;
         }
     }

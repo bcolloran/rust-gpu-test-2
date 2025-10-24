@@ -2,6 +2,7 @@
 #![no_std]
 
 pub mod grid;
+pub mod particles;
 
 pub struct RowA {
     pub x: u32,
@@ -15,6 +16,32 @@ use core::ops::{Add, AddAssign};
 pub fn add_update<T: Add + AddAssign>(a: &mut T, b: T) {
     *a += b
 }
+
+pub const QUALITY: u32 = 1;
+pub const N_PARTICLES: u32 = 9000 * QUALITY * QUALITY;
+pub const MATERIAL_GROUP_SIZE: u32 = N_PARTICLES / 3;
+
+// grid constants
+
+/// Number of grid cells along one dimension
+pub const N_GRID: u32 = 128 * QUALITY;
+/// total number of grid cells
+pub const N_GRID_TOTAL: u32 = N_GRID * N_GRID;
+
+pub const DX: f32 = 1.0 / (N_GRID as f32);
+pub const INV_DX: f32 = N_GRID as f32;
+pub const DT: f32 = 1e-4 / (QUALITY as f32);
+pub const P_VOL: f32 = (DX * 0.5) * (DX * 0.5);
+pub const P_RHO: f32 = 1.0;
+pub const P_MASS: f32 = P_VOL * P_RHO;
+pub const YOUNGS_MODULUS: f32 = 5e3;
+pub const POISSON_RATIO: f32 = 0.2;
+
+/// Lame parameter mu
+pub const MU_0: f32 = YOUNGS_MODULUS / (2.0 * (1.0 + POISSON_RATIO));
+/// Lame parameter lambda
+pub const LAMBDA_0: f32 =
+    YOUNGS_MODULUS * POISSON_RATIO / ((1.0 + POISSON_RATIO) * (1.0 - 2.0 * POISSON_RATIO));
 
 /// Workgroup size for compute shaders
 /// IMPORTANT: This must be kept in sync with the literal value in kernel/src/lib.rs

@@ -190,5 +190,5 @@ pub fn fullscreen_vs(
 /// Alternative fragment shader that colors based on screen position
 #[spirv(fragment)]
 pub fn fullscreen_fs(#[spirv(frag_coord)] in_frag_coord: Vec4, output: &mut Vec4) {
-    *output = in_frag_coord / Vec4::new(800.0, 600.0, 1.0, 1.0);
+    *output = in_frag_coord / Vec4::new(2000.0, 2000.0, 1.0, 1.0);
 }

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use bytemuck::Zeroable;
 use glam::Vec2;
+use rand::random;
 use rust_gpu_chimera_demo::{
     graphics::GraphicsRenderer,
     runners::{
@@ -18,8 +19,7 @@ use rust_gpu_chimera_demo::{
     *,
 };
 use shared::{
-    grid::{GridCell, GRID_SIZE},
-    num_workgroups_1d, num_workgroups_2d,
+    grid::GridCell, num_workgroups_1d, num_workgroups_2d, MATERIAL_GROUP_SIZE, N_GRID, N_PARTICLES,
 };
 use vulkano::{shader::ShaderModule, swapchain::Surface};
 use winit::{
@@ -70,7 +70,7 @@ where
                 .create_window(
                     Window::default_attributes()
                         .with_title("Rust GPU - Compute + Graphics Demo")
-                        .with_inner_size(winit::dpi::LogicalSize::new(800, 600)),
+                        .with_inner_size(winit::dpi::LogicalSize::new(2000, 2000)),
                 )
                 .unwrap(),
         );
@@ -169,7 +169,7 @@ where
                     .unwrap();
 
                 renderer
-                    .set_grid_buffer(grid_buffer, GRID_SIZE, GRID_SIZE)
+                    .set_grid_buffer(grid_buffer, N_GRID, N_GRID)
                     .unwrap();
 
                 // Render the frame
@@ -215,32 +215,41 @@ where
 fn main() -> Result<()> {
     println!("=== Rust GPU Compute + Graphics Demo ===\n");
 
-    let n = 256;
-
-    let mut a = vec![1u32; n];
-    let mut b = (0..n as u32).collect::<Vec<u32>>();
-    let mut c = vec![30u32; n];
-    let mut d = (0..n as u32).map(|x| x * x).collect::<Vec<u32>>();
+    let mut a = vec![1u32; N_PARTICLES as usize];
+    let mut b = (0..N_PARTICLES as u32).collect::<Vec<u32>>();
+    let mut c = vec![30u32; N_PARTICLES as usize];
+    let mut d = (0..N_PARTICLES as u32).map(|x| x * x).collect::<Vec<u32>>();
 
     // Create particle positions and velocities
     // Positions will be moved around by compute shaders
-    let mut x = (0..n as u32)
+    // let mut x = (0..n as u32)
+    //     .map(|i| {
+    //         let angle = (i as f32) * std::f32::consts::PI * 2.0 / n as f32;
+    //         let radius = 0.3 + 0.2 * (i as f32 / n as f32);
+    //         Vec2::new(0.5 + radius * angle.cos(), 0.5 + radius * angle.sin())
+    //     })
+    //     .collect::<Vec<Vec2>>();
+
+    let mut x = (0..N_PARTICLES as u32)
         .map(|i| {
-            let angle = (i as f32) * std::f32::consts::PI * 2.0 / n as f32;
-            let radius = 0.3 + 0.2 * (i as f32 / n as f32);
-            Vec2::new(0.5 + radius * angle.cos(), 0.5 + radius * angle.sin())
+            let group_offset = (i / MATERIAL_GROUP_SIZE) as f32;
+
+            let px = random::<f32>() * 0.2 + 0.3 + 0.1 * group_offset;
+            let py = random::<f32>() * 0.2 + 0.05 + 0.3 * group_offset;
+
+            Vec2::new(px, py)
         })
         .collect::<Vec<Vec2>>();
 
     // Velocities - make particles spiral outward
-    let mut v = (0..n as u32)
+    let mut v = (0..N_PARTICLES as u32)
         .map(|i| {
-            let angle = (i as f32) * std::f32::consts::PI * 2.0 / n as f32;
-            Vec2::new(0.001 * angle.cos(), 0.001 * angle.sin())
+            let angle = (i as f32) * std::f32::consts::PI * 2.0 / N_PARTICLES as f32;
+            Vec2::new(0.00001 * angle.cos(), 0.00001 * angle.sin())
         })
-        .collect::<Vec<Vec2>>();
+        .collect::<Vec<_>>();
 
-    let mut grid = (0..(GRID_SIZE * GRID_SIZE))
+    let mut grid = (0..(N_GRID * N_GRID))
         .map(|_| GridCell::zeroed())
         .collect::<Vec<_>>();
 
@@ -249,13 +258,15 @@ fn main() -> Result<()> {
         buf_spec("b", 1, &mut b),
         buf_spec("c", 2, &mut c),
         buf_spec("d", 3, &mut d),
+        // particles
         buf_spec("x", 2, &mut x),
         buf_spec("v", 3, &mut v),
+        // grid
         buf_spec("grid", 4, &mut grid),
     );
 
-    let wg_1d = num_workgroups_1d(n as u32);
-    let wg_2d = num_workgroups_2d(n as u32, n as u32);
+    let wg_1d = num_workgroups_1d(N_PARTICLES as u32);
+    let wg_2d = num_workgroups_2d(N_PARTICLES as u32, N_PARTICLES as u32);
 
     // Setup compute shader configuration
     let adder_kernel = kernel("adder", vec![0, 1], wg_1d);
@@ -263,8 +274,9 @@ fn main() -> Result<()> {
     let wrap_particles_kernel = kernel("wrap_particles", vec![2], wg_1d);
 
     let fill_grid_random_kernel = kernel("fill_grid_random", vec![4], wg_2d);
-    let clear_grid_mass_kernel = kernel("clear_grid_mass", vec![4], wg_2d);
-    let p2g_kernel = kernel("p2g", vec![2, 4], wg_1d);
+    let clear_grid_kernel = kernel("clear_grid", vec![4], wg_2d);
+    let p2g_simple_test_kernel = kernel("p2g_simple_test", vec![2, 4], wg_1d);
+    let p2g_kernel = kernel("p2g::p2g", vec![2, 3, 4], wg_1d);
 
     let invocation_chain = vec![
         invoc_spec("adder_ab", vec!["a", "b"], adder_kernel.clone()),
@@ -294,12 +306,9 @@ fn main() -> Result<()> {
         //     vec!["grid"],
         //     fill_grid_random_kernel.clone(),
         // ),
-        invoc_spec(
-            "clear_grid_mass",
-            vec!["grid"],
-            clear_grid_mass_kernel.clone(),
-        ),
-        invoc_spec("p2g", vec!["x", "grid"], p2g_kernel.clone()),
+        invoc_spec("clear_grid", vec!["grid"], clear_grid_kernel.clone()),
+        // invoc_spec("p2g_simple_test", vec!["x", "grid"], p2g_simple_test_kernel.clone()),
+        invoc_spec("p2g", vec!["x", "v", "grid"], p2g_kernel.clone()),
     ];
 
     // Create compute runner

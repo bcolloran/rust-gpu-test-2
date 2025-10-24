@@ -2,10 +2,17 @@
 // HACK(eddyb) can't easily see warnings otherwise from `spirv-builder` builds.
 // #![deny(warnings)]
 
+pub mod bindless;
+pub mod mult;
+pub mod p2g;
+
 use core::u32;
 
 use glam::UVec3;
-use shared::grid::{grid_index, grid_index_unit_xy};
+use shared::{
+    grid::{linear_grid_index, linear_grid_index_unit_xy},
+    P_MASS,
+};
 use spirv_std::{
     arch::atomic_f_add,
     glam::{self, vec2, Vec2, Vec4},
@@ -13,9 +20,6 @@ use spirv_std::{
 };
 
 use spirv_std::memory::{Scope, Semantics};
-
-pub mod bindless;
-pub mod mult;
 
 #[spirv(compute(threads(64)))]
 pub fn adder(
@@ -93,7 +97,7 @@ pub fn fill_grid_random(
 ) {
     let x = id.x;
     let y = id.y;
-    let index = grid_index(x, y);
+    let index = linear_grid_index(x, y);
 
     // Simple pseudo-random generation based on indices
     let mass = rand_f32([x, y, 0]);
@@ -103,23 +107,24 @@ pub fn fill_grid_random(
     // let velocity = vec2(1.0, -9.0);
 
     grid[index].mass = mass;
-    grid[index].velocity = velocity;
+    grid[index].v = velocity;
 }
 
 #[spirv(compute(threads(8, 8)))]
-pub fn clear_grid_mass(
+pub fn clear_grid(
     #[spirv(global_invocation_id)] id: UVec3,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 4)] grid: &mut [shared::grid::GridCell],
 ) {
     let x = id.x;
     let y = id.y;
-    let index = grid_index(x, y);
+    let index = linear_grid_index(x, y);
 
     grid[index].mass = 0.0;
+    grid[index].v = Vec2::ZERO;
 }
 
 #[spirv(compute(threads(64)))]
-pub fn p2g(
+pub fn p2g_simple_test(
     #[spirv(global_invocation_id)] id: UVec3,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] ps: &mut [Vec2],
     #[spirv(storage_buffer, descriptor_set = 0, binding = 4)] grid: &mut [shared::grid::GridCell],
@@ -128,7 +133,7 @@ pub fn p2g(
 
     let p = ps[i];
 
-    let index = grid_index_unit_xy(p.x, p.y);
+    let index = linear_grid_index_unit_xy(p.x, p.y);
 
     // let mass = 10.0;
     // let velocity = vec2(1.0, -9.0);
@@ -201,7 +206,7 @@ pub fn fullscreen_vs(
 /// Alternative fragment shader that colors based on screen position
 #[spirv(fragment)]
 pub fn fullscreen_fs(#[spirv(frag_coord)] in_frag_coord: Vec4, output: &mut Vec4) {
-    *output = in_frag_coord / Vec4::new(800.0, 600.0, 1.0, 1.0);
+    *output = in_frag_coord / Vec4::new(2000.0, 2000.0, 1.0, 1.0);
 }
 
 // ==============================================================================
@@ -285,8 +290,22 @@ pub fn grid_vs(
 /// Higher mass values appear brighter (whiter), lower values appear darker (blacker).
 #[spirv(fragment)]
 pub fn grid_fs(in_mass: f32, output: &mut Vec4) {
-    // Clamp mass to [0, 1] range to be safe
-    let mass_clamped = 0.25 * in_mass.clamp(0.0, 1.0);
+    let mass_clamped = if in_mass > 0.0 {
+        // iterpolate between 0.0 at in_mass=0.0 to 1.0 at in_mass=P_MASS * MASS_MULTIPLIER, clamped to [0, 1]
+        const MASS_MULTIPLIER: f32 = 20.0;
+        let interpolated = in_mass / (P_MASS * MASS_MULTIPLIER);
+        let clamped = interpolated.min(1.0);
+
+        const COLOR_MIN: f32 = 0.1;
+        const COLOR_MAX: f32 = 0.5;
+
+        // If mass is positive, use minimum value of COLOR_MIN
+        // saturate to COLOR_MAX when MASS_MULTIPLIER*P_MASS is reached
+        // Clamp mass to [0, 1] range to be safe
+        COLOR_MIN + (clamped * (COLOR_MAX - COLOR_MIN))
+    } else {
+        0.0
+    };
 
     // Simple grayscale mapping: mass directly maps to brightness
     // You could add color mapping here for a more interesting heatmap
