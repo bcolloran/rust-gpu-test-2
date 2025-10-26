@@ -1,7 +1,7 @@
 use core::clone::Clone;
 
 use bytemuck::{Pod, Zeroable};
-use spirv_std::glam::{IVec2, Mat2, UVec2, Vec2};
+use spirv_std::glam::{IVec2, UVec2, Vec2};
 
 use crate::N_GRID;
 

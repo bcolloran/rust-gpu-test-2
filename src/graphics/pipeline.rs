@@ -42,14 +42,14 @@ pub fn create_graphics_pipeline(
     viewport: Viewport,
 ) -> CrateResult<Arc<GraphicsPipeline>> {
     // Get the entry points from the shader modules
-    let vs = vs.entry_point("main_vs").ok_or(
+    let vs = vs.entry_point("render::particles::particles_vs").ok_or(
         crate::graphics::error::GraphicsError::VertexShaderEntryPointNotFound(
-            "main_vs".to_string(),
+            "render::particles::particles_vs".to_string(),
         ),
     )?;
-    let fs = fs.entry_point("main_fs").ok_or(
+    let fs = fs.entry_point("render::particles::particles_fs").ok_or(
         crate::graphics::error::GraphicsError::FragmentShaderEntryPointNotFound(
-            "main_fs".to_string(),
+            "render::particles::particles_fs".to_string(),
         ),
     )?;
 
@@ -150,16 +150,20 @@ pub fn create_grid_pipeline(
     viewport: Viewport,
 ) -> CrateResult<Arc<GraphicsPipeline>> {
     // Get the entry points from the shader modules
-    let vs = vs.entry_point("grid_vs").ok_or(
-        crate::graphics::error::GraphicsError::VertexShaderEntryPointNotFound(
-            "grid_vs".to_string(),
-        ),
-    )?;
-    let fs = fs.entry_point("grid_fs").ok_or(
-        crate::graphics::error::GraphicsError::FragmentShaderEntryPointNotFound(
-            "grid_fs".to_string(),
-        ),
-    )?;
+    let vs = vs
+        .entry_point("render::grid_density::grid_density_vs")
+        .ok_or(
+            crate::graphics::error::GraphicsError::VertexShaderEntryPointNotFound(
+                "render::grid_density::grid_density_vs".to_string(),
+            ),
+        )?;
+    let fs = fs
+        .entry_point("render::grid_density::grid_density_fs")
+        .ok_or(
+            crate::graphics::error::GraphicsError::FragmentShaderEntryPointNotFound(
+                "render::grid_density::grid_density_fs".to_string(),
+            ),
+        )?;
 
     // We're not using traditional vertex buffers - positions are generated in the shader
     let vertex_input_state = VertexInputState::new();

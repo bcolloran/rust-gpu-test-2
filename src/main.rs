@@ -19,7 +19,8 @@ use rust_gpu_chimera_demo::{
     *,
 };
 use shared::{
-    grid::GridCell, num_workgroups_1d, num_workgroups_2d, MATERIAL_GROUP_SIZE, N_GRID, N_PARTICLES,
+    grid::GridCell, num_workgroups_1d, num_workgroups_2d, DX, MATERIAL_GROUP_SIZE, N_GRID,
+    N_PARTICLES,
 };
 use vulkano::{shader::ShaderModule, swapchain::Surface};
 use winit::{
@@ -230,23 +231,35 @@ fn main() -> Result<()> {
     //     })
     //     .collect::<Vec<Vec2>>();
 
+    // let mut x = (0..N_PARTICLES as u32)
+    //     .map(|i| {
+    //         let group_offset = (i / MATERIAL_GROUP_SIZE) as f32;
+
+    //         let px = random::<f32>() * 0.2 + 0.3 + 0.1 * group_offset;
+    //         let py = random::<f32>() * 0.2 + 0.05 + 0.3 * group_offset;
+
+    //         Vec2::new(px, py)
+    //     })
+    //     .collect::<Vec<Vec2>>();
+
+    // Velocities - make particles spiral outward
+    // let mut v = (0..N_PARTICLES as u32)
+    //     .map(|i| {
+    //         let angle = (i as f32) * std::f32::consts::PI * 2.0 / N_PARTICLES as f32;
+    //         Vec2::new(0.00001 * angle.cos(), 0.00001 * angle.sin())
+    //     })
+    // .collect::<Vec<_>>();
+
     let mut x = (0..N_PARTICLES as u32)
         .map(|i| {
             let group_offset = (i / MATERIAL_GROUP_SIZE) as f32;
-
-            let px = random::<f32>() * 0.2 + 0.3 + 0.1 * group_offset;
-            let py = random::<f32>() * 0.2 + 0.05 + 0.3 * group_offset;
-
-            Vec2::new(px, py)
+            let px = ((5 * i) as f32 + 0.5) * DX;
+            Vec2::new(px, (0.5 + (5.0 * group_offset)) * DX)
         })
         .collect::<Vec<Vec2>>();
 
-    // Velocities - make particles spiral outward
     let mut v = (0..N_PARTICLES as u32)
-        .map(|i| {
-            let angle = (i as f32) * std::f32::consts::PI * 2.0 / N_PARTICLES as f32;
-            Vec2::new(0.00001 * angle.cos(), 0.00001 * angle.sin())
-        })
+        .map(|_i| Vec2::new(0.000001, 0.0))
         .collect::<Vec<_>>();
 
     let mut grid = (0..(N_GRID * N_GRID))

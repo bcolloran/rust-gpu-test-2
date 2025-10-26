@@ -140,9 +140,9 @@ The vertex shader automatically converts these to Vulkan clip space [-1, 1].
 - Check that the surface/window was created correctly
 - Verify swapchain extension (khr_swapchain) is supported
 
-### "Vertex shader entry point 'main_vs' not found"
+### "shader entry point 'X' not found"
 - Ensure you're using the correct SPIR-V module
-- Check that shaders were compiled: `cargo build` should show "SPIRV entry points: ..., main_vs, main_fs, ..."
+- Check that shaders were compiled: `cargo build` should show "SPIRV entry points: {list of entry points}", where the list should include all required entry points
 
 ### Blank screen / no particles visible
 - Verify `set_position_buffer()` was called with valid data
