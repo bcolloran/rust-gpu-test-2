@@ -19,7 +19,7 @@ use rust_gpu_chimera_demo::{
     *,
 };
 use shared::{
-    grid::GridCell, num_workgroups_1d, num_workgroups_2d, DX, MATERIAL_GROUP_SIZE, N_GRID,
+    grid::GridCell, num_workgroups_1d, num_workgroups_2d, DX, MATERIAL_GROUP_SIZE, N_GRID_X,
     N_PARTICLES,
 };
 use vulkano::{shader::ShaderModule, swapchain::Surface};
@@ -170,7 +170,7 @@ where
                     .unwrap();
 
                 renderer
-                    .set_grid_buffer(grid_buffer, N_GRID, N_GRID)
+                    .set_grid_buffer(grid_buffer, N_GRID_X, N_GRID_X)
                     .unwrap();
 
                 // Render the frame
@@ -262,7 +262,7 @@ fn main() -> Result<()> {
         .map(|_i| Vec2::new(0.000001, 0.0))
         .collect::<Vec<_>>();
 
-    let mut grid = (0..(N_GRID * N_GRID))
+    let mut grid = (0..(N_GRID_X * N_GRID_X))
         .map(|_| GridCell::zeroed())
         .collect::<Vec<_>>();
 
@@ -278,18 +278,19 @@ fn main() -> Result<()> {
         buf_spec("grid", 4, &mut grid),
     );
 
-    let wg_1d = num_workgroups_1d(N_PARTICLES as u32);
-    let wg_2d = num_workgroups_2d(N_PARTICLES as u32, N_PARTICLES as u32);
+    let wg_particles = num_workgroups_1d(N_PARTICLES);
 
     // Setup compute shader configuration
-    let adder_kernel = kernel("adder", vec![0, 1], wg_1d);
-    let step_particles_kernel = kernel("step_particles", vec![2, 3], wg_1d);
-    let wrap_particles_kernel = kernel("wrap_particles", vec![2], wg_1d);
+    let adder_kernel = kernel("adder", vec![0, 1], wg_particles);
+    let step_particles_kernel = kernel("step_particles", vec![2, 3], wg_particles);
+    let wrap_particles_kernel = kernel("wrap_particles", vec![2], wg_particles);
 
-    let fill_grid_random_kernel = kernel("fill_grid_random", vec![4], wg_2d);
-    let clear_grid_kernel = kernel("clear_grid", vec![4], wg_2d);
-    let p2g_simple_test_kernel = kernel("p2g_simple_test", vec![2, 4], wg_1d);
-    let p2g_kernel = kernel("p2g::p2g", vec![2, 3, 4], wg_1d);
+    let wg_grid = num_workgroups_2d(N_GRID_X, N_GRID_X);
+
+    let fill_grid_random_kernel = kernel("fill_grid_random", vec![4], wg_grid);
+    let clear_grid_kernel = kernel("clear_grid", vec![4], wg_grid);
+    let p2g_simple_test_kernel = kernel("p2g_simple_test", vec![2, 4], wg_particles);
+    let p2g_kernel = kernel("p2g::p2g", vec![2, 3, 4], wg_grid);
 
     let invocation_chain = vec![
         invoc_spec("adder_ab", vec!["a", "b"], adder_kernel.clone()),
@@ -314,12 +315,12 @@ fn main() -> Result<()> {
             step_particles_kernel.clone(),
         ),
         invoc_spec("wrap_particles", vec!["x"], wrap_particles_kernel.clone()),
+        invoc_spec("clear_grid", vec!["grid"], clear_grid_kernel.clone()),
         // invoc_spec(
         //     "fill_grid_random",
         //     vec!["grid"],
         //     fill_grid_random_kernel.clone(),
         // ),
-        invoc_spec("clear_grid", vec!["grid"], clear_grid_kernel.clone()),
         // invoc_spec("p2g_simple_test", vec!["x", "grid"], p2g_simple_test_kernel.clone()),
         invoc_spec("p2g", vec!["x", "v", "grid"], p2g_kernel.clone()),
     ];

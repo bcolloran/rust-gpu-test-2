@@ -24,12 +24,13 @@ pub const MATERIAL_GROUP_SIZE: u32 = N_PARTICLES / 3;
 // grid constants
 
 /// Number of grid cells along one dimension
-pub const N_GRID: u32 = 128 * QUALITY;
+pub const N_GRID_X: u32 = 128 * QUALITY;
 /// total number of grid cells
-pub const N_GRID_TOTAL: u32 = N_GRID * N_GRID;
+pub const N_GRID_TOTAL: u32 = N_GRID_X * N_GRID_X;
 
-pub const DX: f32 = 1.0 / (N_GRID as f32);
-pub const INV_DX: f32 = N_GRID as f32;
+/// Grid cell size,
+pub const DX: f32 = 1.0 / (N_GRID_X as f32);
+pub const INV_DX: f32 = N_GRID_X as f32;
 pub const DT: f32 = 1e-4 / (QUALITY as f32);
 pub const P_VOL: f32 = (DX * 0.5) * (DX * 0.5);
 pub const P_RHO: f32 = 1.0;

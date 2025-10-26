@@ -3,7 +3,7 @@ use core::clone::Clone;
 use bytemuck::{Pod, Zeroable};
 use spirv_std::glam::{IVec2, UVec2, Vec2};
 
-use crate::N_GRID;
+use crate::N_GRID_X;
 
 #[allow(non_snake_case)]
 #[repr(C)]
@@ -18,27 +18,27 @@ pub struct GridCell {
 
 #[inline(always)]
 pub fn linear_grid_index(x: u32, y: u32) -> usize {
-    (y * N_GRID + x) as usize
+    (y * N_GRID_X + x) as usize
 }
 
 #[inline(always)]
 pub fn linear_grid_index_uvec(idx: UVec2) -> usize {
-    (idx.y * N_GRID + idx.x) as usize
+    (idx.y * N_GRID_X + idx.x) as usize
 }
 
 /// compute the linear index in a GRID_SIZE x GRID_SIZE grid from (x, y) in [0.0, 1.0] range
 #[inline(always)]
 pub fn linear_grid_index_unit_xy(x: f32, y: f32) -> usize {
-    let grid_x = (x * N_GRID as f32) as u32;
-    let grid_y = (y * N_GRID as f32) as u32;
+    let grid_x = (x * N_GRID_X as f32) as u32;
+    let grid_y = (y * N_GRID_X as f32) as u32;
     linear_grid_index(grid_x, grid_y)
 }
 
 /// Compute the 2d grid index in a GRID_SIZE x GRID_SIZE grid from (x, y) in [0.0, 1.0] range
 #[inline(always)]
 pub fn grid_index_unit_xy(x: f32, y: f32) -> UVec2 {
-    let grid_x = (x * N_GRID as f32) as u32;
-    let grid_y = (y * N_GRID as f32) as u32;
+    let grid_x = (x * N_GRID_X as f32) as u32;
+    let grid_y = (y * N_GRID_X as f32) as u32;
     UVec2::new(grid_x, grid_y)
 }
 
