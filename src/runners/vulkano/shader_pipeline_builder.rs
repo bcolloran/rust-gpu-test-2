@@ -56,6 +56,40 @@ impl ShaderPipelineSpec {
             builder_state: InitialSpec {},
         }
     }
+
+    pub fn invocation_name(&self) -> &'static str {
+        &self.invocation_name
+    }
+
+    pub fn buf_names(&self) -> &Vec<&'static str> {
+        &self.buf_names
+    }
+
+    /// Validate that all buffer names in this pipeline spec exist in the given buffer specs.
+    /// NOTE: this does not check that the invocation lists all the buffers it needs, only that the ones it
+    /// lists do exist.
+    pub fn validate_against_buffer_specs<S: DescriptorSetByName>(
+        &self,
+        buffer_specs: &S,
+    ) -> CrateResult<()> {
+        //check that the invocation lists all the buffers it needs
+        for buf_name in self.buf_names.iter() {
+            // just check it exists
+            buffer_specs.descriptor_set_by_name(buf_name)?;
+        }
+
+        // check that the number of buffer names matches the the number of bindings in the kernel config
+        if self.buf_names.len() != self.kernel_config.binding_nums_in_shader.len() {
+            return Err(
+                crate::error::ChimeraError::PipelineSpecBufferNameCountMismatch {
+                    invocation_name: self.invocation_name.to_string(),
+                    expected: self.kernel_config.binding_nums_in_shader.len(),
+                    found: self.buf_names.len(),
+                },
+            );
+        }
+        Ok(())
+    }
 }
 
 /// spec for a shader pipeline invocation
