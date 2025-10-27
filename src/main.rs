@@ -19,7 +19,7 @@ use rust_gpu_chimera_demo::{
     *,
 };
 use shared::{
-    grid::GridCell, num_workgroups_1d, num_workgroups_2d, DX, MATERIAL_GROUP_SIZE, N_GRID_X,
+    grid::GridCell, num_workgroups_1d, num_workgroups_2d, MATERIAL_GROUP_SIZE, N_GRID_X,
     N_PARTICLES,
 };
 use vulkano::{shader::ShaderModule, swapchain::Surface};
@@ -221,45 +221,34 @@ fn main() -> Result<()> {
     let mut c = vec![30u32; N_PARTICLES as usize];
     let mut d = (0..N_PARTICLES as u32).map(|x| x * x).collect::<Vec<u32>>();
 
-    // Create particle positions and velocities
-    // Positions will be moved around by compute shaders
-    // let mut x = (0..n as u32)
-    //     .map(|i| {
-    //         let angle = (i as f32) * std::f32::consts::PI * 2.0 / n as f32;
-    //         let radius = 0.3 + 0.2 * (i as f32 / n as f32);
-    //         Vec2::new(0.5 + radius * angle.cos(), 0.5 + radius * angle.sin())
-    //     })
-    //     .collect::<Vec<Vec2>>();
+    let mut x = (0..N_PARTICLES as u32)
+        .map(|i| {
+            let group_offset = (i / MATERIAL_GROUP_SIZE) as f32;
 
-    // let mut x = (0..N_PARTICLES as u32)
-    //     .map(|i| {
-    //         let group_offset = (i / MATERIAL_GROUP_SIZE) as f32;
+            let px = random::<f32>() * 0.2 + 0.3 + 0.1 * group_offset;
+            let py = random::<f32>() * 0.2 + 0.05 + 0.3 * group_offset;
 
-    //         let px = random::<f32>() * 0.2 + 0.3 + 0.1 * group_offset;
-    //         let py = random::<f32>() * 0.2 + 0.05 + 0.3 * group_offset;
+            Vec2::new(px, py)
+        })
+        .collect::<Vec<Vec2>>();
 
-    //         Vec2::new(px, py)
-    //     })
-    //     .collect::<Vec<Vec2>>();
-
-    // Velocities - make particles spiral outward
     // let mut v = (0..N_PARTICLES as u32)
     //     .map(|i| {
     //         let angle = (i as f32) * std::f32::consts::PI * 2.0 / N_PARTICLES as f32;
     //         Vec2::new(0.00001 * angle.cos(), 0.00001 * angle.sin())
     //     })
-    // .collect::<Vec<_>>();
+    //     .collect::<Vec<_>>();
 
-    let mut x = (0..N_PARTICLES as u32)
-        .map(|i| {
-            let group_offset = (i / MATERIAL_GROUP_SIZE) as f32;
-            let px = ((5 * i) as f32 + 0.5) * DX;
-            Vec2::new(px, (0.5 + (5.0 * group_offset)) * DX)
-        })
-        .collect::<Vec<Vec2>>();
+    // let mut x = (0..N_PARTICLES as u32)
+    //     .map(|i| {
+    //         let group_offset = (i / MATERIAL_GROUP_SIZE) as f32;
+    //         let px = ((5 * i) as f32 + 0.5) * DX;
+    //         Vec2::new(px, (0.5 + (5.0 * group_offset)) * DX)
+    //     })
+    //     .collect::<Vec<Vec2>>();
 
     let mut v = (0..N_PARTICLES as u32)
-        .map(|_i| Vec2::new(0.000001, 0.0))
+        .map(|_i| Vec2::new(0.000003, 0.000003))
         .collect::<Vec<_>>();
 
     let mut grid = (0..(N_GRID_X * N_GRID_X))

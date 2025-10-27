@@ -2,6 +2,7 @@
 #![no_std]
 
 pub mod grid;
+pub mod mpm_utils;
 pub mod particles;
 
 pub struct RowA {
@@ -18,7 +19,7 @@ pub fn add_update<T: Add + AddAssign>(a: &mut T, b: T) {
 }
 
 pub const QUALITY: u32 = 1;
-pub const N_PARTICLES: u32 = 9 * QUALITY * QUALITY;
+pub const N_PARTICLES: u32 = 9000 * QUALITY * QUALITY;
 pub const MATERIAL_GROUP_SIZE: u32 = N_PARTICLES / 3;
 
 // grid constants

@@ -18,12 +18,32 @@ pub struct GridCell {
 
 #[inline(always)]
 pub fn linear_grid_index(x: u32, y: u32) -> usize {
+    if x >= N_GRID_X || y >= N_GRID_X {
+        return usize::MAX;
+    }
     (y * N_GRID_X + x) as usize
 }
 
 #[inline(always)]
 pub fn linear_grid_index_uvec(idx: UVec2) -> usize {
     (idx.y * N_GRID_X + idx.x) as usize
+}
+
+#[inline(always)]
+pub fn linear_grid_index_ivec(idx: IVec2) -> usize {
+    if idx.x < 0 || idx.y < 0 || idx.x >= N_GRID_X as i32 || idx.y >= N_GRID_X as i32 {
+        return usize::MAX;
+    }
+    (idx.y * N_GRID_X as i32 + idx.x) as usize
+}
+
+/// Unsafe version that does not check bounds
+///
+/// # Safety
+/// Caller must ensure that idx is within bounds
+#[inline(always)]
+pub unsafe fn linear_grid_index_ivec_unchecked(idx: IVec2) -> usize {
+    (idx.y * N_GRID_X as i32 + idx.x) as usize
 }
 
 /// compute the linear index in a GRID_SIZE x GRID_SIZE grid from (x, y) in [0.0, 1.0] range
@@ -59,7 +79,7 @@ pub const STENCIL_OFFSETS: [IVec2; 9] = [
 
 /// Offsets for a 3x3 stencil around a grid cell.
 /// Positive version, useful for indexing.
-pub const STENCIL_OFFSETS_POS: [UVec2; 9] = [
+pub const STENCIL_OFFSETS_U32: [UVec2; 9] = [
     UVec2::new(0, 0),
     UVec2::new(1, 0),
     UVec2::new(2, 0),

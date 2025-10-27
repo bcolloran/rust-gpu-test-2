@@ -1,8 +1,3 @@
-//! Graphics pipeline creation and management
-//!
-//! This module builds the graphics pipeline that renders Vec2 points as pixels.
-//! The pipeline uses shaders compiled from rust-gpu (shaders/src/lib.rs).
-
 use crate::error::CrateResult;
 use glam::Vec2;
 use shared::grid::GridCell;
@@ -26,6 +21,87 @@ use vulkano::{
     render_pass::{RenderPass, Subpass},
     shader::ShaderModule,
 };
+
+/// Create a graphics pipeline for rendering grid lines
+///
+/// This pipeline:
+/// - Uses a vertex shader that generates line positions from push constants
+/// - Renders lines using LineList topology (each pair of vertices = one line)
+/// - Draws vertical and horizontal lines at grid cell boundaries
+/// - Colors lines in light red
+pub fn create_grid_lines_pipeline(
+    device: Arc<vulkano::device::Device>,
+    vs: Arc<ShaderModule>,
+    fs: Arc<ShaderModule>,
+    render_pass: Arc<RenderPass>,
+    viewport: Viewport,
+) -> CrateResult<Arc<GraphicsPipeline>> {
+    // Get the entry points from the shader modules
+    let vs = vs.entry_point("render::grid_lines::grid_lines_vs").ok_or(
+        crate::graphics::error::GraphicsError::VertexShaderEntryPointNotFound(
+            "render::grid_lines::grid_lines_vs".to_string(),
+        ),
+    )?;
+    let fs = fs.entry_point("render::grid_lines::grid_lines_fs").ok_or(
+        crate::graphics::error::GraphicsError::FragmentShaderEntryPointNotFound(
+            "render::grid_lines::grid_lines_fs".to_string(),
+        ),
+    )?;
+
+    // We're not using traditional vertex buffers - positions are generated in the shader
+    let vertex_input_state = VertexInputState::new();
+
+    let stages = [
+        PipelineShaderStageCreateInfo::new(vs),
+        PipelineShaderStageCreateInfo::new(fs),
+    ];
+
+    // Create the pipeline layout (describes descriptor sets, push constants, etc.)
+    let layout = PipelineLayout::new(
+        device.clone(),
+        PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
+            .into_pipeline_layout_create_info(device.clone())?,
+    )?;
+
+    let subpass = Subpass::from(render_pass.clone(), 0)
+        .ok_or(crate::graphics::error::GraphicsError::SubpassCreationFailed)?;
+
+    // Build the graphics pipeline
+    let pipeline = GraphicsPipeline::new(
+        device.clone(),
+        None,
+        GraphicsPipelineCreateInfo {
+            stages: stages.into_iter().collect(),
+            vertex_input_state: Some(vertex_input_state),
+            // Input assembly: render lines (each pair of vertices forms one line)
+            input_assembly_state: Some(InputAssemblyState {
+                topology: PrimitiveTopology::LineList,
+                ..Default::default()
+            }),
+            // Viewport and scissor rect
+            viewport_state: Some(ViewportState {
+                viewports: [viewport].into_iter().collect(),
+                ..Default::default()
+            }),
+            // Rasterization: convert primitives to fragments
+            rasterization_state: Some(RasterizationState {
+                cull_mode: CullMode::None,
+                ..Default::default()
+            }),
+            // Multisampling: anti-aliasing (disabled for simplicity)
+            multisample_state: Some(MultisampleState::default()),
+            // Color blending: how fragment colors combine with existing framebuffer colors
+            color_blend_state: Some(ColorBlendState::with_attachment_states(
+                subpass.num_color_attachments(),
+                ColorBlendAttachmentState::default(),
+            )),
+            subpass: Some(subpass.into()),
+            ..GraphicsPipelineCreateInfo::layout(layout)
+        },
+    )?;
+
+    Ok(pipeline)
+}
 
 /// Create a graphics pipeline for rendering points from a buffer
 ///

@@ -12,7 +12,7 @@ use crate::{
         device::select_physical_device,
         pipeline::{
             create_descriptor_set, create_graphics_pipeline, create_grid_descriptor_set,
-            create_grid_pipeline,
+            create_grid_lines_pipeline, create_grid_pipeline,
         },
     },
 };
@@ -53,8 +53,9 @@ pub struct GraphicsRenderer {
     render_pass: Arc<RenderPass>,
     framebuffers: Vec<Arc<Framebuffer>>,
 
-    // Two pipelines: one for grid heatmap, one for particle points
+    // Three pipelines: grid heatmap, grid lines, and particle points
     grid_pipeline: Arc<vulkano::pipeline::GraphicsPipeline>,
+    grid_lines_pipeline: Arc<vulkano::pipeline::GraphicsPipeline>,
     particle_pipeline: Arc<vulkano::pipeline::GraphicsPipeline>,
 
     command_buffers: Vec<Arc<PrimaryAutoCommandBuffer>>,
@@ -247,6 +248,15 @@ impl GraphicsRenderer {
             viewport.clone(),
         )?;
 
+        // Create the grid lines pipeline for rendering grid boundaries
+        let grid_lines_pipeline = create_grid_lines_pipeline(
+            device.clone(),
+            vs.clone(),
+            fs.clone(),
+            render_pass.clone(),
+            viewport.clone(),
+        )?;
+
         // Create the particle pipeline for rendering points
         let particle_pipeline = create_graphics_pipeline(
             device.clone(),
@@ -278,6 +288,7 @@ impl GraphicsRenderer {
             render_pass,
             framebuffers,
             grid_pipeline,
+            grid_lines_pipeline,
             particle_pipeline,
             command_buffers,
             command_buffer_allocator,
@@ -344,6 +355,7 @@ impl GraphicsRenderer {
             &self.descriptor_set_allocator,
             &self.queue,
             &self.grid_pipeline,
+            &self.grid_lines_pipeline,
             &self.particle_pipeline,
             &self.framebuffers,
             &self.render_pass,
@@ -436,8 +448,16 @@ impl GraphicsRenderer {
         // Update viewport for new dimensions
         self.viewport.extent = [new_dimensions[0] as f32, new_dimensions[1] as f32];
 
-        // Recreate both pipelines with new viewport
+        // Recreate all three pipelines with new viewport
         self.grid_pipeline = create_grid_pipeline(
+            self.device.clone(),
+            self.vs.clone(),
+            self.fs.clone(),
+            self.render_pass.clone(),
+            self.viewport.clone(),
+        )?;
+
+        self.grid_lines_pipeline = create_grid_lines_pipeline(
             self.device.clone(),
             self.vs.clone(),
             self.fs.clone(),
@@ -496,18 +516,20 @@ fn create_framebuffers(
         .collect::<Vec<_>>()
 }
 
-/// Helper function to create command buffers that render both grid and particles
+/// Helper function to create command buffers that render grid, grid lines, and particles
 ///
 /// Each command buffer:
 /// 1. Begins a render pass with a clear color (dark blue)
 /// 2. Renders the grid heatmap (if grid buffer is set)
-/// 3. Renders the particle points on top (if position buffer is set)
-/// 4. Ends the render pass
+/// 3. Renders the grid lines on top of the heatmap
+/// 4. Renders the particle points on top (if position buffer is set)
+/// 5. Ends the render pass
 fn create_dual_command_buffers(
     allocator: &Arc<StandardCommandBufferAllocator>,
     descriptor_set_allocator: &Arc<StandardDescriptorSetAllocator>,
     queue: &Arc<Queue>,
     grid_pipeline: &Arc<vulkano::pipeline::GraphicsPipeline>,
+    grid_lines_pipeline: &Arc<vulkano::pipeline::GraphicsPipeline>,
     particle_pipeline: &Arc<vulkano::pipeline::GraphicsPipeline>,
     framebuffers: &[Arc<Framebuffer>],
     _render_pass: &Arc<RenderPass>, // Kept for consistency but not used
@@ -582,6 +604,24 @@ fn create_dual_command_buffers(
                         .push_constants(grid_pipeline.layout().clone(), 0, push_constants)?
                         // Draw 6 vertices per instance (2 triangles = 1 quad per grid cell)
                         .draw(6, num_cells, 0, 0)?;
+                }
+
+                // Render grid lines on top of heatmap
+                if grid_width > 0 && grid_height > 0 {
+                    let push_constants = GridPushConstants {
+                        grid_width,
+                        grid_height,
+                    };
+
+                    // Calculate number of vertices needed for grid lines:
+                    // Vertical lines: (grid_width + 1) lines * 2 vertices each
+                    // Horizontal lines: (grid_height + 1) lines * 2 vertices each
+                    let num_line_vertices = (grid_width + 1) * 2 + (grid_height + 1) * 2;
+
+                    builder
+                        .bind_pipeline_graphics(grid_lines_pipeline.clone())?
+                        .push_constants(grid_lines_pipeline.layout().clone(), 0, push_constants)?
+                        .draw(num_line_vertices, 1, 0, 0)?;
                 }
 
                 // Render particles on top (if available)
