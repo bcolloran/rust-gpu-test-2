@@ -13,6 +13,13 @@ pub enum ChimeraError {
     #[error("DescriptorSetNameNotFound: {0}")]
     DescriptorSetNameNotFound(String),
 
+    #[error("Pipeline spec `{invocation_name}` buffer name count mismatch: expected {expected}, found {found}")]
+    PipelineSpecBufferNameCountMismatch {
+        invocation_name: String,
+        expected: usize,
+        found: usize,
+    },
+
     #[error("No descriptor set with type `{0}` named `{1}` found")]
     TypedDescriptorSetNameNotFound(String, String),
 

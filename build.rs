@@ -21,6 +21,7 @@ fn build_spirv_kernel() {
         .capability(Capability::AtomicFloat32AddEXT)
         .capability(Capability::AtomicFloat64AddEXT)
         .capability(Capability::VulkanMemoryModelDeviceScopeKHR)
+        .capability(Capability::Int8)
         .print_metadata(spirv_builder::MetadataPrintout::Full)
         .build()
         .unwrap();

@@ -103,6 +103,10 @@ where
 
         let buffer_specs_for_gpu = buffer_specs.with_gpu_buffer(memory_allocator.clone())?;
 
+        pipeline_specs
+            .iter()
+            .try_for_each(|spec| spec.validate_against_buffer_specs(&buffer_specs_for_gpu))?;
+
         let command_buffer = build_compute_pass_command_buffer(
             command_buffer_allocator.clone(),
             descriptor_set_allocator.clone(),

@@ -19,8 +19,10 @@ use rust_gpu_chimera_demo::{
     *,
 };
 use shared::{
-    grid::GridCell, num_workgroups_1d, num_workgroups_2d, MATERIAL_GROUP_SIZE, N_GRID_X,
-    N_PARTICLES,
+    grid::GridCell,
+    num_workgroups_1d, num_workgroups_2d,
+    particles::{Material, MaterialPod, ParticleDeformation, ParticleMatrices},
+    MATERIAL_GROUP_SIZE, N_GRID_X, N_PARTICLES,
 };
 use vulkano::{shader::ShaderModule, swapchain::Surface};
 use winit::{
@@ -221,16 +223,30 @@ fn main() -> Result<()> {
     let mut c = vec![30u32; N_PARTICLES as usize];
     let mut d = (0..N_PARTICLES as u32).map(|x| x * x).collect::<Vec<u32>>();
 
-    let mut x = (0..N_PARTICLES as u32)
+    let mut particle_material = (0..N_PARTICLES as u32)
         .map(|i| {
-            let group_offset = (i / MATERIAL_GROUP_SIZE) as f32;
+            let material: Material = (i / MATERIAL_GROUP_SIZE).into();
+            material.into()
+        })
+        .collect::<Vec<MaterialPod>>();
 
+    let mut x = particle_material
+        .iter()
+        .map(|material| {
+            let group_offset = material.u8() as f32;
             let px = random::<f32>() * 0.2 + 0.3 + 0.1 * group_offset;
             let py = random::<f32>() * 0.2 + 0.05 + 0.3 * group_offset;
 
             Vec2::new(px, py)
         })
         .collect::<Vec<Vec2>>();
+
+    let mut particle_matrices = (0..N_PARTICLES)
+        .map(|_i| ParticleMatrices::new())
+        .collect::<Vec<_>>();
+    let mut particle_deformation = (0..N_PARTICLES)
+        .map(|_i| ParticleDeformation::new())
+        .collect::<Vec<_>>();
 
     // let mut v = (0..N_PARTICLES as u32)
     //     .map(|i| {
@@ -265,6 +281,9 @@ fn main() -> Result<()> {
         buf_spec("v", 3, &mut v),
         // grid
         buf_spec("grid", 4, &mut grid),
+        buf_spec("particle_matrices", 5, &mut particle_matrices),
+        buf_spec("particle_deformation", 6, &mut particle_deformation),
+        buf_spec("particle_material", 7, &mut particle_material),
     );
 
     // Particle workgroups
@@ -277,14 +296,16 @@ fn main() -> Result<()> {
     let adder_kernel = kernel("adder", vec![0, 1], wg_particles);
     let step_particles_kernel = kernel("step_particles", vec![2, 3], wg_particles);
     let wrap_particles_kernel = kernel("wrap_particles", vec![2], wg_particles);
-    let p2g_kernel = kernel("p2g::p2g", vec![2, 3, 4], wg_particles);
+    let p2g_kernel = kernel("p2g::p2g", vec![2, 3, 4, 5, 6, 7], wg_particles);
 
     // Grid workgroups
     let wg_grid = num_workgroups_2d(N_GRID_X, N_GRID_X);
     // grid kernels
-    let fill_grid_random_kernel = kernel("fill_grid_random", vec![4], wg_grid);
+
     let clear_grid_kernel = kernel("clear_grid", vec![4], wg_grid);
-    let p2g_simple_test_kernel = kernel("p2g_simple_test", vec![2, 4], wg_particles);
+
+    // let fill_grid_random_kernel = kernel("fill_grid_random", vec![4], wg_grid);
+    // let p2g_simple_test_kernel = kernel("p2g_simple_test", vec![2, 4], wg_particles);
 
     let invocation_chain = vec![
         invoc_spec("adder_ab", vec!["a", "b"], adder_kernel.clone()),
@@ -316,7 +337,18 @@ fn main() -> Result<()> {
         //     fill_grid_random_kernel.clone(),
         // ),
         // invoc_spec("p2g_simple_test", vec!["x", "grid"], p2g_simple_test_kernel.clone()),
-        invoc_spec("p2g", vec!["x", "v", "grid"], p2g_kernel.clone()),
+        invoc_spec(
+            "p2g",
+            vec![
+                "x",
+                "v",
+                "grid",
+                "particle_matrices",
+                "particle_deformation",
+                "particle_material",
+            ],
+            p2g_kernel.clone(),
+        ),
     ];
 
     // Create compute runner

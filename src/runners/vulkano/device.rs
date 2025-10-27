@@ -61,19 +61,20 @@ pub fn compute_capable_device_and_queue(
     // uses the VulkanMemoryModel capability, which maps to the `vulkan_memory_model`
     // device feature. Without enabling this feature, Vulkano validation rejects the
     // shader module creation (previous runtime error root cause).
-    let mut required_features = DeviceFeatures::empty();
-    required_features.vulkan_memory_model = true;
-    required_features.vulkan_memory_model_device_scope = true;
+    let mut required_capabilities = DeviceFeatures::empty();
+    required_capabilities.vulkan_memory_model = true;
+    required_capabilities.vulkan_memory_model_device_scope = true;
 
-    required_features.shader_buffer_float32_atomics = true;
-    required_features.shader_buffer_float32_atomic_add = true;
+    required_capabilities.shader_buffer_float32_atomics = true;
+    required_capabilities.shader_buffer_float32_atomic_add = true;
     // required_features.shader_buffer_float32_atomic_min_max = true;
 
-    required_features.shader_buffer_float64_atomics = true;
-    required_features.shader_buffer_float64_atomic_add = true;
+    required_capabilities.shader_buffer_float64_atomics = true;
+    required_capabilities.shader_buffer_float64_atomic_add = true;
     // required_features.shader_buffer_float64_atomic_min_max = true;
 
-    required_features.shader_buffer_int64_atomics = true;
+    required_capabilities.shader_buffer_int64_atomics = true;
+    required_capabilities.shader_int8 = true;
 
     // dbg!(physical.supported_features());
     // // Verify support before requesting so we can provide a clearer error.
@@ -94,7 +95,7 @@ pub fn compute_capable_device_and_queue(
                 ..Default::default()
             }],
             enabled_extensions: required_extensions,
-            enabled_features: required_features,
+            enabled_features: required_capabilities,
             ..Default::default()
         },
     )?;
