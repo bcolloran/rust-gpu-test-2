@@ -248,7 +248,7 @@ fn main() -> Result<()> {
     //     .collect::<Vec<Vec2>>();
 
     let mut v = (0..N_PARTICLES as u32)
-        .map(|_i| Vec2::new(0.000003, 0.000003))
+        .map(|_i| Vec2::new(0.0003, 0.0003))
         .collect::<Vec<_>>();
 
     let mut grid = (0..(N_GRID_X * N_GRID_X))
@@ -267,19 +267,24 @@ fn main() -> Result<()> {
         buf_spec("grid", 4, &mut grid),
     );
 
+    // Particle workgroups
     let wg_particles = num_workgroups_1d(N_PARTICLES);
-
-    // Setup compute shader configuration
+    println!(
+        "Using {} workgroups for particles ({} total particles)",
+        wg_particles[0], N_PARTICLES
+    );
+    // particle kernels
     let adder_kernel = kernel("adder", vec![0, 1], wg_particles);
     let step_particles_kernel = kernel("step_particles", vec![2, 3], wg_particles);
     let wrap_particles_kernel = kernel("wrap_particles", vec![2], wg_particles);
+    let p2g_kernel = kernel("p2g::p2g", vec![2, 3, 4], wg_particles);
 
+    // Grid workgroups
     let wg_grid = num_workgroups_2d(N_GRID_X, N_GRID_X);
-
+    // grid kernels
     let fill_grid_random_kernel = kernel("fill_grid_random", vec![4], wg_grid);
     let clear_grid_kernel = kernel("clear_grid", vec![4], wg_grid);
     let p2g_simple_test_kernel = kernel("p2g_simple_test", vec![2, 4], wg_particles);
-    let p2g_kernel = kernel("p2g::p2g", vec![2, 3, 4], wg_grid);
 
     let invocation_chain = vec![
         invoc_spec("adder_ab", vec!["a", "b"], adder_kernel.clone()),

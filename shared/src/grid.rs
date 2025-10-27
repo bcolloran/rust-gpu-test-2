@@ -39,7 +39,7 @@ pub fn linear_grid_index_ivec(idx: IVec2) -> usize {
 
 /// Unsafe version that does not check bounds
 ///
-/// # Safety
+/// Safety:
 /// Caller must ensure that idx is within bounds
 #[inline(always)]
 pub unsafe fn linear_grid_index_ivec_unchecked(idx: IVec2) -> usize {
