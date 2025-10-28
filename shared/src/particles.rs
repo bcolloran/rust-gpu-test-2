@@ -45,7 +45,7 @@ impl ParticleDeformation {
 #[derive(Copy, Clone, Debug)]
 pub enum Material {
     Fluid = 0,
-    Solid = 1,
+    Jelly = 1,
     Snow = 2,
 }
 
@@ -53,7 +53,7 @@ impl From<u8> for Material {
     fn from(value: u8) -> Self {
         match value {
             0 => Material::Fluid,
-            1 => Material::Solid,
+            1 => Material::Jelly,
             2 => Material::Snow,
             _ => panic!("Invalid material value: {}", value),
         }
@@ -75,7 +75,7 @@ impl MaterialPod {
     pub fn to_material(&self) -> Material {
         match self.0 {
             0 => Material::Fluid,
-            1 => Material::Solid,
+            1 => Material::Jelly,
             2 => Material::Snow,
             _ => panic!("Invalid material value: {}", self.0),
         }

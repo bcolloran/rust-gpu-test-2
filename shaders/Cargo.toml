@@ -21,3 +21,7 @@ shared = { path = "../shared" }
 
 [build-dependencies]
 spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", branch = "main" }
+
+[dev-dependencies]
+
+proptest = "1.9.0"

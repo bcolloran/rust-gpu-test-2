@@ -1,4 +1,5 @@
-#![cfg_attr(target_arch = "spirv", no_std)]
+// #![cfg_attr(target_arch = "spirv", no_std)]
+#![no_std]
 // HACK(eddyb) can't easily see warnings otherwise from `spirv-builder` builds.
 // #![deny(warnings)]
 
@@ -6,6 +7,8 @@ pub mod bindless;
 pub mod mult;
 pub mod p2g;
 pub mod render;
+pub mod svd;
+pub mod util;
 
 use core::u32;
 
